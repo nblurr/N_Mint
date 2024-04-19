@@ -1,0 +1,21 @@
+{
+  "name": "n_mint",
+  "version": "1.0.0",
+  "description": "N mint call",
+  "main": "mintToken",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "N beleiver",
+  "license": "ISC",
+  "dependencies": {
+    "@ethersproject/bignumber": "^5.7.0",
+    "@quicknode/sdk": "^2.1.1",
+    "alchemy-sdk": "^3.1.2",
+    "axios": "^1.6.8",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.11.1",
+    "node-fetch": "^3.3.2",
+    "solc": "^0.8.7-fixed"
+  }
+}
