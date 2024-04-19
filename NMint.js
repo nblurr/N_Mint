@@ -124,8 +124,6 @@ async function getNUsdPrice() {
 
     if (token0.toLowerCase() === wethAddress) { // WETH address
         const ethPriceInUsd = await getEthUsdPrice(); // This function needs to be implemented or use an API
-        console.log('ethPriceInUsd ' + ethPriceInUsd);
-        
         tokenPriceInUsd = Number(ethPriceInUsd) / Number(nbToken1ForOneToken0);
     }
 
@@ -154,7 +152,6 @@ async function setGlobal(){
 
         nUsdUniswapV3Price = await getNUsdPrice();
         targetMaxPrice = nUsdUniswapV3Price * targetMarketPriceFactor; // Target buy price
-        console.log('targetMaxPrice ' + targetMaxPrice);
 
         maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
         priorityFee = ethers.parseUnits(addTipsGwei, 'gwei');
@@ -194,7 +191,7 @@ async function mintTokenNow() {
            if(mintCount != 0 ) {
                 actualPricePerNTarget = targetMaxPrice + generateRandomBetween(-0.002, 0.002);
            }
-            console.log("target : " + actualPricePerNTarget + ", Actual estimated cost per N (Always a bit higher): " + pricePerN);
+            console.log("target : " + actualPricePerNTarget + ", Actual estimated cost per N : " + pricePerN);
            if(pricePerN < actualPricePerNTarget){
                 mintCount = (mintCount ==2 ? 0: mintCount+1);
 
@@ -209,7 +206,6 @@ async function mintTokenNow() {
 
 async function mintTokenOp() {
     if(isMintTx == false) {
-        console.log('start mint');
         isMintTx = true;
 
         try {
@@ -236,6 +232,7 @@ async function mintTokenOp() {
                       }
                     },
                     ]);
+                    
                     console.log("" + new Date().toLocaleTimeString() + " Transaction mined: ", heads);
 
                     // Force wait 3 minutes before next trial
