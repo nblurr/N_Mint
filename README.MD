@@ -58,7 +58,7 @@ Before you clone and run this project, ensure you have the following installed:
 To get started with the N_Blurr project, you first need to clone the repository. Open a terminal and run the following command:
 
 ```bash
-git clone https://github.com/nblurr/N_Blurr.git
+git clone https://github.com/nblurr/N_Mint.git
 cd N_Blurr
 npm install
 ```
