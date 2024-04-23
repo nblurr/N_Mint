@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>NMint script</title>
+</head>
+<body>
+    <h1>Script Parameters</h1>
+
+    <form id="scriptForm">
+        <label for="privateKey">Private Key:</label>
+        <input type="text" id="privateKey" name="privateKey"><br><br>
+
+        <label for="alchemyKey">Quicknode Enpoint RPC with MEV + Flashbot protected Add-ons:</label>
+        <input type="text" id="alchemyKey" name="alchemyKey"><br><br>
+
+        <label for="alchemyKey">Alchemy API Key:</label>
+        <input type="text" id="alchemyKey" name="alchemyKey"><br><br>
+
+        <label for="etherscanKey">Etherscan API Key:</label>
+        <input type="text" id="etherscanKey" name="etherscanKey"><br><br>
+
+        <button type="button" onclick="runScript()">Run Script</button>
+    </form>
+
+    <script src="NMint.js"></script>
+</body>
+</html>
