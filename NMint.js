@@ -1,24 +1,3 @@
-function runScript() {
-    const privateKey = document.getElementById('privateKey').value;
-    const alchemyKey = document.getElementById('alchemyKey').value;
-    const etherscanKey = document.getElementById('etherscanKey').value;
-    const quicknodeRPC = document.getElementById('quicknodeRPC').value;
-
-    alert(JSON.stringify({ privateKey, alchemyKey, etherscanKey, quicknodeRPC}));
-    /*
-    fetch('https://your-backend-url.com/run', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ privateKey, alchemyKey, etherscanKey })
-    })
-    .then(response => response.json())
-    .then(data => alert('Script run successfully: ' + data.message))
-    .catch(error => console.error('Error running script:', error));
-    */
-}
-
 const { ethers, JsonRpcProvider, utils } = require('ethers');
 const axios = require('axios');
 const { BigNumber } = require('@ethersproject/bignumber');
@@ -44,6 +23,27 @@ require('dotenv').config();
     - Improve API and websocket management.
     - Optimize code for better performance and maintainability.
 */
+
+var scriptRun = true;
+
+function runScript() {
+    const privateKey = document.getElementById('privateKey').value;
+    const alchemyKey = document.getElementById('alchemyKey').value;
+    const etherscanKey = document.getElementById('etherscanKey').value;
+    const quicknodeRPC = document.getElementById('quicknodeRPC').value;
+    
+    process.env.PRIVATE_KEY=privateKey;
+    process.env.ETH_RPC=quicknodeRPC;
+    process.env.ETHERSCAN_API_KEY=etherscanKey;
+    process.env.ALCHEMY_API_KEY=alchemyKey;
+
+    mintToken().catch(console.error);
+}
+
+function stopScript() {
+    scriptRun = stop;
+}
+
 
 const walletPrivateKey = process.env.PRIVATE_KEY; // An ETH private key is required to proceed to this script
 
@@ -202,7 +202,7 @@ function generateRandomBetween(min, max) {
 }
 
 async function mintTokenNow() {
-    if(isMintTx == false && globalSetDone == true) {
+    if(isMintTx == false && globalSetDone == true && scriptRun == true) {
         try {
            var nbMinPrevious = await minutesDifferenceFromNow(timestampLastTx);
            var nbMintable = ((nbMinPrevious * 60 )/12) + 2;
@@ -335,5 +335,3 @@ async function getEthUsdPrice() {
     }
 
 }
-
-mintToken().catch(console.error);
