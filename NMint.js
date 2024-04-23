@@ -1,3 +1,24 @@
+function runScript() {
+    const privateKey = document.getElementById('privateKey').value;
+    const alchemyKey = document.getElementById('alchemyKey').value;
+    const etherscanKey = document.getElementById('etherscanKey').value;
+    const rpcEndPoint = document.getElementById('rpcEndpoint').value;
+
+    alert (JSON.stringify({ privateKey, alchemyKey, etherscanKey });
+    /*
+    fetch('https://your-backend-url.com/run', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ privateKey, alchemyKey, etherscanKey })
+    })
+    .then(response => response.json())
+    .then(data => alert('Script run successfully: ' + data.message))
+    .catch(error => console.error('Error running script:', error));
+    */
+}
+
 const { ethers, JsonRpcProvider, utils } = require('ethers');
 const axios = require('axios');
 const { BigNumber } = require('@ethersproject/bignumber');
