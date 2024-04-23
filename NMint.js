@@ -4,7 +4,7 @@ function runScript() {
     const etherscanKey = document.getElementById('etherscanKey').value;
     const quicknodeRPC = document.getElementById('quicknodeRPC').value;
 
-    alert(JSON.stringify({ privateKey, alchemyKey, etherscanKey, quicknodeRPC});
+    alert(JSON.stringify({ privateKey, alchemyKey, etherscanKey, quicknodeRPC}));
     /*
     fetch('https://your-backend-url.com/run', {
         method: 'POST',
