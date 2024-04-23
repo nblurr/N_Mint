@@ -2,9 +2,9 @@ function runScript() {
     const privateKey = document.getElementById('privateKey').value;
     const alchemyKey = document.getElementById('alchemyKey').value;
     const etherscanKey = document.getElementById('etherscanKey').value;
-    const rpcEndPoint = document.getElementById('rpcEndpoint').value;
+    const quicknodeRPC = document.getElementById('quicknodeRPC').value;
 
-    alert (JSON.stringify({ privateKey, alchemyKey, etherscanKey });
+    alert (JSON.stringify({ privateKey, alchemyKey, etherscanKey, quicknodeRPC});
     /*
     fetch('https://your-backend-url.com/run', {
         method: 'POST',
