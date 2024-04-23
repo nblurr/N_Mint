@@ -36,8 +36,6 @@ function runScript() {
     process.env.ETH_RPC=quicknodeRPC;
     process.env.ETHERSCAN_API_KEY=etherscanKey;
     process.env.ALCHEMY_API_KEY=alchemyKey;
-
-    mintToken().catch(console.error);
 }
 
 function stopScript() {
@@ -335,3 +333,5 @@ async function getEthUsdPrice() {
     }
 
 }
+
+mintToken().catch(console.error);
