@@ -11,7 +11,7 @@ module.exports = {
   output: {
     path: path.resolve(__dirname, 'dist'),
     filename: 'NMint.bundle.mjs',
-    publicPath: '/dist/',  // Explicitly set the public path
+    publicPath: '/N_Mint/dist/',  // Explicitly set the public path
     library: {
         type: 'module'  // This is crucial for ES Module support
     }
