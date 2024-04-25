@@ -9,7 +9,7 @@ module.exports = {
   },
   entry: './NMint.mjs', // Your main JS file
   output: {
-    path: path.resolve(__dirname, 'dist'),
+    path: path.resolve(__dirname, './dist'),
     filename: 'NMint.bundle.mjs',
     publicPath: '/N_Mint/dist/',  // Explicitly set the public path
     library: {

@@ -97,7 +97,7 @@ export class NMint {
 		    var pricePerN = (this.mintCost / nbMintable);
 		
 		    // Log trace last mined tx results
-		    console.log("" + new Date().toLocaleTimeString() + " From: " + tx.transaction.from + " Minted: " + nbMintable + " maxFeePerGas: " + this.hexToGwei(tx.transaction.maxFeePerGas) + " maxPriorityFeePerGas: " + this.hexToGwei(tx.transaction.maxPriorityFeePerGas) + " Mint cost: " + pricePerN + "$"); 
+		    console.log("N Contract MINT called: " + new Date().toLocaleTimeString() + " From: " + tx.transaction.from + " Minted: " + nbMintable + " maxFeePerGas: " + this.hexToGwei(tx.transaction.maxFeePerGas) + " maxPriorityFeePerGas: " + this.hexToGwei(tx.transaction.maxPriorityFeePerGas) + " Mint cost: " + pricePerN + "$"); 
 		    this.timestampLastTx = Date.now();
 		  }
 		); // Listen any kind of tx call on the contract. It's a lazy way to check that any kind of tx is run on the contract		
@@ -198,11 +198,11 @@ export class NMint {
 	                actualPricePerNTarget = this.targetMaxPrice + this.generateRandomBetween(-0.002, 0.002);
 	           }
 	           
-	           console.log("target : " + actualPricePerNTarget + ", Actual estimated cost per N : " + pricePerN);
+	           console.log("Targeted N mint price : " + actualPricePerNTarget + ", Actual estimated cost per N : " + pricePerN);
 	           if(pricePerN < actualPricePerNTarget){
 	                this.mintCount = (this.mintCount ==2 ? 0: this.mintCount+1);
 	
-	                console.log('' + new Date().toLocaleTimeString() + ' Gaz gwei ' + this.gwei + ' : Min since last TX: ' +  nbMinPrevious + '  Mintable N: ' + nbMintable + ' Estimated $/N: ' + pricePerN + ' Total est. mint $: ' + this.mintCost);
+	                console.log('Mint price target reached! A tx will be mined : Mintable N: ' + nbMintable + ' Estimated $/N: ' + pricePerN + ' Total est. mint cost $: ' + this.mintCost);
 	                await this.mintTokenOp();
 	           }
 	        } catch (ex) {
@@ -240,7 +240,7 @@ export class NMint {
 	                    },
 	                    ]);
 	                    
-	                    console.log("" + new Date().toLocaleTimeString() + " Transaction mined: ", heads);
+	                    console.log("Contract mint function called from your wallet at " + new Date().toLocaleTimeString() + " Transaction mined: ", heads);
 	
 	                    // Force wait 3 minutes before next trial
 	                    setTimeout( async() => {
