@@ -1,0 +1,471 @@
+'use strict';
+
+Object.defineProperty(exports, '__esModule', { value: true });
+
+var viem = require('viem');
+var zod = require('zod');
+var chains = require('viem/chains');
+var fetch$1 = require('cross-fetch');
+var web3_js = require('@solana/web3.js');
+
+function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'default' in e ? e : { 'default': e }; }
+
+function _interopNamespace(e) {
+    if (e && e.__esModule) return e;
+    var n = Object.create(null);
+    if (e) {
+        Object.keys(e).forEach(function (k) {
+            if (k !== 'default') {
+                var d = Object.getOwnPropertyDescriptor(e, k);
+                Object.defineProperty(n, k, d.get ? d : {
+                    enumerable: true,
+                    get: function () { return e[k]; }
+                });
+            }
+        });
+    }
+    n["default"] = e;
+    return Object.freeze(n);
+}
+
+var viem__namespace = /*#__PURE__*/_interopNamespace(viem);
+var fetch__default = /*#__PURE__*/_interopDefaultLegacy(fetch$1);
+var web3_js__namespace = /*#__PURE__*/_interopNamespace(web3_js);
+
+class QNInputValidationError extends Error {
+    constructor({ messages, zodError, }) {
+        super(`QuickNode SDK Input Validation Error: ${messages.join(', ')}`);
+        this.messages = messages;
+        this.issues = zodError.issues;
+        this.zodError = zodError; // see https://github.com/colinhacks/zod/blob/HEAD/ERROR_HANDLING.md
+    }
+}
+
+class QNInvalidEndpointUrl extends Error {
+    constructor() {
+        super('Endpoint URL is not in a valid QuickNode URL format. Please check the URL and try again');
+    }
+}
+
+class QNChainNotSupported extends Error {
+    constructor(endpointUrl) {
+        super(`The chain for endpoint URL ${endpointUrl} is not currently supported by the QuickNode SDK.`);
+    }
+}
+
+function formatErrors(baseError) {
+    const errorMessages = [];
+    baseError.errors.forEach((error) => {
+        errorMessages.push(`${error.path.length > 0 ? error.path + ': ' : ''}${error.message}`);
+    });
+    return errorMessages.length > 0
+        ? new QNInputValidationError({
+            messages: errorMessages,
+            zodError: baseError,
+        })
+        : null;
+}
+
+// We can't dynamically extend the viem client based on which add-ons are specified, which would
+// make the types fully align with the add-ons for the client, so instead we do run-time checks to
+// prevent calling add-ons not explicitly added in the config
+function checkAddOnEnabled(enabled, humanName, configName) {
+    if (!enabled) {
+        throw new Error(`${humanName} is not set as enabled. Please ensure the addon is enabled on your QuickNode endpoint and enable ${configName} in the Core configuration argument`);
+    }
+}
+
+const isEvmAddress = zod.z
+    .string()
+    .length(42) // Using built-in function for better error messages
+    .startsWith('0x') // Using built-in function for better error messages
+    .regex(/^0x[a-fA-F0-9]{40}$/, 'Not a valid address');
+const rpcPaginationParams = zod.z
+    .object({
+    perPage: zod.z.number().positive().nullish(),
+    page: zod.z.number().positive().nullish(),
+})
+    .strict();
+
+const qnFetchNFTInputSchema = zod.z
+    .object({
+    wallet: isEvmAddress,
+    contracts: zod.z.array(isEvmAddress).nullish(),
+    omitFields: zod.z.array(zod.z.string()).nullish(),
+})
+    .merge(rpcPaginationParams)
+    .strict();
+
+const qnFetchNFTCollectionDetailsInputSchema = zod.z
+    .object({
+    contracts: zod.z.array(isEvmAddress),
+})
+    .strict();
+
+const qnFetchNFTsByCollectionInputSchema = zod.z
+    .object({
+    collection: isEvmAddress,
+    tokens: zod.z.array(zod.z.string()).nullish(),
+    omitFields: zod.z.array(zod.z.string()).nullish(),
+})
+    .merge(rpcPaginationParams)
+    .strict();
+
+const qnGetTransfersByNFTInputSchema = zod.z
+    .object({
+    collection: isEvmAddress,
+    collectionTokenId: zod.z.string(),
+})
+    .merge(rpcPaginationParams)
+    .strict();
+
+const qnVerifyNFTsOwnerInputSchema = zod.z
+    .object({
+    wallet: isEvmAddress,
+    contracts: zod.z.array(zod.z.string()), // TODO: make this enforce the address:id format
+})
+    .strict();
+
+const qnGetTokenMetadataByCAInputSchema = zod.z
+    .object({
+    contract: isEvmAddress,
+})
+    .strict();
+
+const qnGetTokenMetadataBySymbolInputSchema = zod.z
+    .object({
+    symbol: zod.z.string(),
+})
+    .merge(rpcPaginationParams)
+    .strict();
+
+const qnGetTransactionsByAddressInputSchema = zod.z
+    .object({
+    address: isEvmAddress,
+    fromBlock: zod.z.number().positive().nullish(),
+    toBlock: zod.z.number().positive().nullish(),
+})
+    .merge(rpcPaginationParams)
+    .strict()
+    .refine(({ fromBlock, toBlock }) => {
+    if (fromBlock && toBlock)
+        return fromBlock < toBlock;
+    return true;
+}, { message: 'fromBlock must be less than toBlock' });
+
+const qnGetWalletTokenBalanceInputSchema = zod.z
+    .object({
+    wallet: isEvmAddress,
+    contracts: zod.z.array(isEvmAddress).nullish(),
+})
+    .merge(rpcPaginationParams)
+    .strict();
+
+const qnGetWalletTokenTransactionsInputSchema = zod.z
+    .object({
+    address: isEvmAddress,
+    contract: isEvmAddress,
+    fromBlock: zod.z.number().positive().nullish(),
+    toBlock: zod.z.number().positive().nullish(),
+})
+    .merge(rpcPaginationParams)
+    .strict();
+
+function nftAndTokenValidator(config, schema, args) {
+    checkAddOnEnabled(config.addOns?.nftTokenV2 ?? false, 'NFT And Token RPC API V2', 'nftTokenV2');
+    // Uses zod to validate schema at runtime
+    const validation = schema.safeParse(args);
+    if (!validation.success) {
+        const formattedErrors = formatErrors(validation.error);
+        if (formattedErrors)
+            throw formattedErrors;
+    }
+}
+const nftAndTokenActions = (client, config) => ({
+    async qn_fetchNFTCollectionDetails(args) {
+        nftAndTokenValidator(config, qnFetchNFTCollectionDetailsInputSchema, args);
+        const response = await client.request({
+            method: 'qn_fetchNFTCollectionDetails',
+            params: [args],
+        });
+        return response;
+    },
+    async qn_fetchNFTs(args) {
+        nftAndTokenValidator(config, qnFetchNFTInputSchema, args);
+        const response = await client.request({
+            method: 'qn_fetchNFTs',
+            params: [args],
+        });
+        return response;
+    },
+    async qn_fetchNFTsByCollection(args) {
+        nftAndTokenValidator(config, qnFetchNFTsByCollectionInputSchema, args);
+        const response = await client.request({
+            method: 'qn_fetchNFTsByCollection',
+            params: [args],
+        });
+        return response;
+    },
+    async qn_getTransfersByNFT(args) {
+        nftAndTokenValidator(config, qnGetTransfersByNFTInputSchema, args);
+        const response = await client.request({
+            method: 'qn_getTransfersByNFT',
+            params: [args],
+        });
+        return response;
+    },
+    async qn_verifyNFTsOwner(args) {
+        nftAndTokenValidator(config, qnVerifyNFTsOwnerInputSchema, args);
+        const response = await client.request({
+            method: 'qn_verifyNFTsOwner',
+            params: [args],
+        });
+        return response;
+    },
+    async qn_getTokenMetadataByContractAddress(args) {
+        nftAndTokenValidator(config, qnGetTokenMetadataByCAInputSchema, args);
+        const response = await client.request({
+            method: 'qn_getTokenMetadataByContractAddress',
+            params: [args],
+        });
+        return response;
+    },
+    async qn_getTokenMetadataBySymbol(args) {
+        nftAndTokenValidator(config, qnGetTokenMetadataBySymbolInputSchema, args);
+        const response = await client.request({
+            method: 'qn_getTokenMetadataBySymbol',
+            params: [args],
+        });
+        return response;
+    },
+    async qn_getTransactionsByAddress(args) {
+        nftAndTokenValidator(config, qnGetTransactionsByAddressInputSchema, args);
+        const response = await client.request({
+            method: 'qn_getTransactionsByAddress',
+            params: [args],
+        });
+        return response;
+    },
+    async qn_getWalletTokenBalance(args) {
+        nftAndTokenValidator(config, qnGetWalletTokenBalanceInputSchema, args);
+        const response = await client.request({
+            method: 'qn_getWalletTokenBalance',
+            params: [args],
+        });
+        return response;
+    },
+    async qn_getWalletTokenTransactions(args) {
+        nftAndTokenValidator(config, qnGetWalletTokenTransactionsInputSchema, args);
+        const response = await client.request({
+            method: 'qn_getWalletTokenTransactions',
+            params: [args],
+        });
+        return response;
+    },
+});
+
+const ETH_MAINNET_NETWORK = 'ethereum-mainnet';
+const qnChainToViemChain = {
+    'arbitrum-mainnet': chains.arbitrum,
+    'arbitrum-goerli': chains.arbitrumGoerli,
+    'arbitrum-sepolia': chains.arbitrumSepolia,
+    'arbitrum-nova': chains.arbitrumNova,
+    'avalanche-mainnet': chains.avalanche,
+    'avalanche-testnet': chains.avalancheFuji,
+    'base-mainnet': chains.base,
+    'base-goerli': chains.baseGoerli,
+    'base-sepolia': chains.baseSepolia,
+    ['bsc']: chains.bsc,
+    'bsc-testnet': chains.bscTestnet,
+    'celo-mainnet': chains.celo,
+    ['fantom']: chains.fantom,
+    ['xdai']: chains.gnosis,
+    ['gnosis']: chains.gnosis,
+    'ethereum-goerli': chains.goerli,
+    'harmony-mainnet': chains.harmonyOne,
+    [ETH_MAINNET_NETWORK]: chains.mainnet,
+    ['optimism']: chains.optimism,
+    'optimism-goerli': chains.optimismGoerli,
+    'optimism-sepolia': chains.optimismSepolia,
+    ['matic']: chains.polygon,
+    ['polygon']: chains.polygon,
+    'scroll-mainnet': chains.scroll,
+    'scroll-testnet': chains.scrollTestnet,
+    'matic-testnet': chains.polygonMumbai,
+    'zkevm-mainnet': chains.polygonZkEvm,
+    'zkevm-testnet': chains.polygonZkEvmTestnet,
+    'ethereum-sepolia': chains.sepolia,
+    'ethereum-holesky': chains.holesky,
+};
+function chainNameFromEndpoint(endpointUrl) {
+    let hostnameParts;
+    try {
+        const parsedUrl = new URL(endpointUrl);
+        hostnameParts = parsedUrl.hostname.split('.');
+    }
+    catch (e) {
+        throw new QNInvalidEndpointUrl();
+    }
+    const quiknode = hostnameParts.at(-2);
+    const chainOrDiscover = hostnameParts.at(-3);
+    if (quiknode !== 'quiknode' || !chainOrDiscover)
+        throw new QNInvalidEndpointUrl();
+    const indexOfName = chainOrDiscover === 'discover' ? -4 : -3;
+    const lengthOfEthereum = chainOrDiscover === 'discover' ? 4 : 3;
+    if (hostnameParts.length === lengthOfEthereum)
+        return ETH_MAINNET_NETWORK;
+    const potentialChainName = hostnameParts.at(indexOfName);
+    if (potentialChainName)
+        return potentialChainName;
+    throw new QNInvalidEndpointUrl();
+}
+function deriveChainFromUrl(endpointUrl) {
+    const chainName = chainNameFromEndpoint(endpointUrl);
+    const viemChain = qnChainToViemChain[chainName];
+    if (viemChain)
+        return viemChain;
+    throw new QNChainNotSupported(endpointUrl);
+}
+
+function setupGlobalFetch() {
+    // Required for viem to work in node
+    if (!globalThis.fetch) {
+        globalThis.fetch = fetch__default["default"];
+        globalThis.Headers = fetch$1.Headers;
+        globalThis.Request = fetch$1.Request;
+        globalThis.Response = fetch$1.Response;
+    }
+}
+
+const buildQNActions = (config) => {
+    return (client) => ({
+        ...nftAndTokenActions(client, config),
+    });
+};
+class Core {
+    constructor({ endpointUrl, chain, config = {} }) {
+        setupGlobalFetch();
+        this.endpointUrl = endpointUrl;
+        const baseClient = viem.createClient({
+            chain: chain || deriveChainFromUrl(endpointUrl),
+            transport: viem.http(this.endpointUrl),
+        }).extend(viem.publicActions);
+        const qnClient = baseClient.extend(buildQNActions(config));
+        this.client = qnClient;
+    }
+}
+
+// eslint-disable-next-line @nx/enforce-module-boundaries
+class Solana {
+    constructor({ endpointUrl }) {
+        this.endpointUrl = endpointUrl;
+        this.connection = new web3_js.Connection(endpointUrl);
+    }
+    /**
+     * Sends a transaction with a dynamically generated priority fee based on the current network conditions and compute units needed by the transaction.
+     */
+    async sendSmartTransaction(args) {
+        const { transaction, keyPair, feeLevel = 'medium', sendTransactionOptions = {}, } = args;
+        const smartTransaction = await this.prepareSmartTransaction({
+            transaction,
+            payerPublicKey: keyPair.publicKey,
+            feeLevel,
+        });
+        smartTransaction.sign(keyPair);
+        const hash = await this.connection.sendRawTransaction(transaction.serialize(), { skipPreflight: true, ...sendTransactionOptions });
+        return hash;
+    }
+    /**
+     * Prepares a transaction to be sent with a dynamically generated priority fee based
+     * on the current network conditions. It adds a `setComputeUnitPrice` instruction to the transaction
+     * and simulates the transaction to estimate the number of compute units it will consume.
+     * The returned transaction still needs to be signed and sent to the network.
+     */
+    async prepareSmartTransaction(args) {
+        const { transaction, payerPublicKey, feeLevel = 'medium' } = args;
+        // Send simulation with placeholders so the value calculated is accurate
+        // placeholders kept low to avoid InsufficientFundsForFee error with the high cu budget limit
+        const simulationInstructions = [
+            web3_js.ComputeBudgetProgram.setComputeUnitPrice({
+                microLamports: 1,
+            }),
+            web3_js.ComputeBudgetProgram.setComputeUnitLimit({ units: 1400000 }),
+            ...transaction.instructions,
+        ];
+        // eslint-disable-next-line prefer-const
+        let [units, computeUnitPriceInstruction, recentBlockhash] = await Promise.all([
+            this.getSimulationUnits(this.connection, simulationInstructions, payerPublicKey),
+            this.createDynamicPriorityFeeInstruction(feeLevel),
+            this.connection.getLatestBlockhash(),
+        ]);
+        transaction.add(computeUnitPriceInstruction);
+        if (units) {
+            units = Math.ceil(units * 1.05); // margin of error
+            transaction.add(web3_js.ComputeBudgetProgram.setComputeUnitLimit({ units }));
+        }
+        transaction.recentBlockhash = recentBlockhash.blockhash;
+        return transaction;
+    }
+    // Get the priority fee averages based on fee data from the latest blocks
+    async fetchEstimatePriorityFees(args = {}) {
+        const payload = {
+            method: 'qn_estimatePriorityFees',
+            params: args,
+            id: 1,
+            jsonrpc: '2.0',
+        };
+        const response = await fetch(this.endpointUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error(`The RPC method qn_estimatePriorityFees was not found on your endpoint! Your endpoint likely does not have the Priority Fee API add-on installed. Please visit https://marketplace.quicknode.com/add-on/solana-priority-fee to install the Priority Fee API and use this method to send your transactions with priority fees calculated with real-time data.`);
+            }
+            throw new Error('Failed to fetch priority fee estimates');
+        }
+        const data = await response.json();
+        return data;
+    }
+    async createDynamicPriorityFeeInstruction(feeType = 'medium') {
+        const { result } = await this.fetchEstimatePriorityFees({});
+        const priorityFee = result.per_compute_unit[feeType];
+        const priorityFeeInstruction = web3_js.ComputeBudgetProgram.setComputeUnitPrice({
+            microLamports: priorityFee,
+        });
+        return priorityFeeInstruction;
+    }
+    async getSimulationUnits(connection, instructions, publicKey) {
+        const testVersionedTxn = new web3_js.VersionedTransaction(new web3_js.TransactionMessage({
+            instructions: instructions,
+            payerKey: publicKey,
+            recentBlockhash: web3_js.PublicKey.default.toString(), // just a placeholder
+        }).compileToV0Message());
+        const simulation = await connection.simulateTransaction(testVersionedTxn, {
+            replaceRecentBlockhash: true,
+            sigVerify: false,
+        });
+        if (simulation.value.err) {
+            console.error('Simulation error:', simulation.value.err);
+            throw new Error(`Failed to simulate transaction ${simulation.value.err}`);
+        }
+        return simulation.value.unitsConsumed;
+    }
+}
+
+const QuickNode = {
+    Core: Core,
+    Solana: Solana,
+};
+
+exports.viem = viem__namespace;
+exports.solanaWeb3 = web3_js__namespace;
+exports.Core = Core;
+exports.QNChainNotSupported = QNChainNotSupported;
+exports.QNInputValidationError = QNInputValidationError;
+exports.QNInvalidEndpointUrl = QNInvalidEndpointUrl;
+exports.Solana = Solana;
+exports["default"] = QuickNode;
