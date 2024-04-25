@@ -25,7 +25,7 @@
     </form>
 
 	<script type="module">
-		import {NMint} from '/dist/NMint.bundle.mjs';
+		import { NMint } from 'https://nblurr.github.io/dist/NMint.bundle.mjs';
 		const n = new NMint();
 		
 	    document.getElementById('run').addEventListener('click', () => n.runScript(document.getElementById('privateKey').value, document.getElementById('alchemyKey').value, document.getElementById('etherscanKey').value, document.getElementById('quicknodeRPC').value));
