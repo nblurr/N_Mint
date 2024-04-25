@@ -88,6 +88,15 @@
         .text-right {
             text-align: right;
         }
+
+	#console-log {
+		border: 1px solid #ccc;
+		padding: 10px;
+		margin: 20px;
+		height: 150px;
+		overflow-y: scroll;  // Makes the div scrollable
+		background-color: #f9f9f9;
+	}
     </style>
 
 </head>
@@ -111,13 +120,32 @@
         <button type="button" id="run">Run Script</button>
         <button type="button" id="stop">Stop Script</button>
     </form>
-
-	<script type="module">
+    <p>
+	<div id="console-log"></div>
+    </p>	
+    <script type="module">
+		const oldLog = console.log; // Save the original console.log function
+		const logger = document.getElementById('console-log'); // Get the log container
+		
+		console.log = function(message) {
+			// Call the original console.log function
+			oldLog.apply(console, arguments);
+			
+			// Create a new div element to hold the log
+			if (typeof message == 'object') {
+			    logger.innerHTML += (JSON && JSON.stringify ? JSON.stringify(message, undefined, 2) : message) + '<br />';
+			} else {
+			    logger.innerHTML += message + '<br />';
+			}
+		}
+		
 		import { NMint } from 'https://nblurr.github.io/N_Mint/dist/NMint.bundle.mjs';
 		const n = new NMint();
 		
-	    document.getElementById('run').addEventListener('click', () => n.runScript(document.getElementById('privateKey').value, document.getElementById('alchemyKey').value, document.getElementById('etherscanKey').value, document.getElementById('quicknodeRPC').value));
-	    document.getElementById('stop').addEventListener('click', () => n.stopScript());
+		document.getElementById('run').addEventListener('click', () => n.runScript(document.getElementById('privateKey').value, document.getElementById('alchemyKey').value, document.getElementById('etherscanKey').value, document.getElementById('quicknodeRPC').value));
+		document.getElementById('stop').addEventListener('click', () => n.stopScript());
+
+		
 	</script>
 
 </body>
