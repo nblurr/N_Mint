@@ -319,22 +319,16 @@ export class NMint {
 	}
 
 	async getEthUsdPrice() {
-	    
-	   	const url = 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd';
+		const url = 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd';
 	
-	    try {
-	        const response = await axios.get(url);
-			console.log('response.data.status ' + response.data.status + ' response.data.result.length ' + response.data.result.length);
-	        if (response.data.status === "1" && response.data.result.length > 0) {
-				console.log('response.data.result ' + JSON.stringify(response));
-	            const price = response.data[0].ethereum.usd;
-	            return price;
-	        } else {
-	            return this.ethUsdPrice;
-	        }
-	    } catch (error) {
-			console.log(error);
-	        return this.ethUsdPrice;
-	    }
+		try {
+			const response = await axios.get(url);
+			const data = response.data;
+			console.log('Ethereum USD Price: ' + data.ethereum.usd);
+			return data.ethereum.usd;
+		} catch (error) {
+			console.error('Failed to fetch Ethereum price:', error);
+			return this.ethUsdPrice;  // Assumes there is a fallback or default value set elsewhere in your class
+		}
 	}
 }
