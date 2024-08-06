@@ -326,8 +326,8 @@ export class NMint {
 	        const response = await axios.get(url);
 			console.log('response.data.status ' + response.data.status + ' response.data.result.length ' + response.data.result.length);
 	        if (response.data.status === "1" && response.data.result.length > 0) {
-				console.log('response.data.result ' + JSON.stringify(response.data.result));
-	            const price = response.data.result.ethereum.usd;
+				console.log('response.data.result ' + JSON.stringify(response));
+	            const price = response.data[0].ethereum.usd;
 	            return price;
 	        } else {
 	            return this.ethUsdPrice;
