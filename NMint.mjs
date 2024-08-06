@@ -39,7 +39,7 @@ export class NMint {
 	mintCost = 0;
 	estGasPrice = 0;
 	totGas = 0;
-	globalSetDone = false;  // Ensure globals has been set at least once
+	globalSetDone = false;  // Ensure globals has been set at least once 
 	feeData;
 	priorityFee;
 	isMintTx = false; // Used to ensure that we will not do 2 tx at same timeframe on the actual script
