@@ -117,6 +117,12 @@
         <label for="etherscanKey">Etherscan API Key:</label>
         <input type="text" id="etherscanKey" name="etherscanKey" value="AZ951U44JNQ6QKKK5BRQTK377E6IBFVXDP"><br><br>
 
+        <label for="tgMarketPrice">Mint at X% of actual market price:</label>
+        <input type="text" id="tgMarketPrice" name="tgMarketPrice" value="0.5"><br><br>
+
+        <label for="tgLimitPrice">Don't mint over X market price:</label>
+        <input type="text" id="tgLimitPrice" name="tgLimitPrice" value="0.10"><br><br>
+
         <button type="button" id="run">Run Script</button>
         <button type="button" id="stop">Stop Script</button>
     </form>
@@ -142,7 +148,7 @@
 		import { NMint } from 'https://nblurr.github.io/N_Mint/dist/NMint.bundle.mjs';
 		const n = new NMint();
 		
-		document.getElementById('run').addEventListener('click', () => n.runScript(document.getElementById('privateKey').value, document.getElementById('alchemyKey').value, document.getElementById('etherscanKey').value, document.getElementById('quicknodeRPC').value));
+		document.getElementById('run').addEventListener('click', () => n.runScript(document.getElementById('privateKey').value, document.getElementById('alchemyKey').value, document.getElementById('etherscanKey').value, document.getElementById('quicknodeRPC').value, document.getElementById('tgMarketPrice').value, document.getElementById('tgLimitPrice').value));
 		document.getElementById('stop').addEventListener('click', () => n.stopScript());
 
 		
