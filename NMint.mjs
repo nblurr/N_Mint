@@ -139,6 +139,7 @@ export class NMint {
 	    let tokenPriceInUsd;
 	
 	    if (token0.toLowerCase() === this.wethAddress) { // WETH address
+			console.log('ETH USD price ' + this.ethUsdPrice) + ' / ' + Number(nbToken1ForOneToken0);
 	        tokenPriceInUsd = Number(this.ethUsdPrice) / Number(nbToken1ForOneToken0);
 	    }
 	
@@ -164,10 +165,7 @@ export class NMint {
 	async setGlobal(){
 	    try {
 	        this.feeData = await this.web3Provider.getFeeData();
-	        this.nUsdUniswapV3Price = await this.getNUsdPrice();
-		
-	        this.targetMaxPrice = this.nUsdUniswapV3Price * this.targetMarketPriceFactor; // Target buy price
-		console.log('Uniswap N price ' + this.nUsdUniswapV3Price + ' * Price factor ' + this.targetMarketPriceFactor + ' = ' + this.targetMaxPrice);
+
 	        this.maxPriorityFeePerGas = this.feeData.maxPriorityFeePerGas;
 	        this.priorityFee = ethers.parseUnits(this.addTipsGwei, 'gwei');
 	        this.priorityFeePerGas = this.maxPriorityFeePerGas + this.priorityFee;
@@ -180,6 +178,9 @@ export class NMint {
 	        this.totGas = this.estGas * ethers.formatUnits(this.estGasPrice, 'gwei') / 1000000000;
 	        this.mintCost = this.totGas * this.ethUsdPrice; // Cost of a mint in USD
 	        this.defaultGasLimit = this.estGas * 2;
+	        this.nUsdUniswapV3Price = await this.getNUsdPrice();
+	        this.targetMaxPrice = this.nUsdUniswapV3Price * this.targetMarketPriceFactor; // Target buy price
+			console.log('Uniswap N price ' + this.nUsdUniswapV3Price + ' * Price factor ' + this.targetMarketPriceFactor + ' = ' + this.targetMaxPrice);
 	        this.globalSetDone = true; // Ensure globals has been set at least once before trying a mint
 	    } catch (ex) {
 			console.log(ex);
