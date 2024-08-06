@@ -165,7 +165,9 @@ export class NMint {
 	    try {
 	        this.feeData = await this.web3Provider.getFeeData();
 	        this.nUsdUniswapV3Price = await this.getNUsdPrice();
+		
 	        this.targetMaxPrice = this.nUsdUniswapV3Price * this.targetMarketPriceFactor; // Target buy price
+		console.log('Uniswap N price ' + this.nUsdUniswapV3Price + ' * Price factor ' + this.targetMarketPriceFactor + ' = ' + this.targetMaxPrice);
 	        this.maxPriorityFeePerGas = this.feeData.maxPriorityFeePerGas;
 	        this.priorityFee = ethers.parseUnits(this.addTipsGwei, 'gwei');
 	        this.priorityFeePerGas = this.maxPriorityFeePerGas + this.priorityFee;
@@ -204,11 +206,13 @@ export class NMint {
 	           }
 	           
 	           console.log("Targeted N mint price : " + actualPricePerNTarget + ", Actual estimated cost per N : " + pricePerN);
-	           if(pricePerN < actualPricePerNTarget && pricePerN <= this.targetLimitPrice){
+	           if(pricePerN > actualPricePerNTarget && pricePerN <= this.targetLimitPrice){
 	                this.mintCount = (this.mintCount ==2 ? 0: this.mintCount+1);
 	
 	                console.log('Mint price target reached! A tx will be mined : Mintable N: ' + nbMintable + ' Estimated $/N: ' + pricePerN + ' Total est. mint cost $: ' + this.mintCost);
-	                await this.mintTokenOp();
+	                /*
+			 await this.mintTokenOp();
+    			*/
 	           }
 	        } catch (ex) {
 	            console.log(ex);
