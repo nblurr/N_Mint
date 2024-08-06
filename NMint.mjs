@@ -27,7 +27,9 @@ export class NMint {
 	rpcProviderUrl; // QUICKNODE RPC Endpoint = recommended: flashbot and MEV bot protect add-ons must be activated
 	alchemyApiKey; // We using two endpoint for webhook and tx to enhance performance and reduce tx listing potential 
 	etherscanAPIKey;
-	targetMarketPriceFactor = 0.65; 	
+	targetMarketPriceFactor = 0.5;
+	targetLimitPrice = 0.01;
+	targetMaxPrice = 0.01; // Default target buy price 	
 	 	
 	contractABI = [{ "inputs": [], "stateMutability": "nonpayable", "type": "constructor" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "owner", "type": "address" }, { "indexed": true, "internalType": "address", "name": "spender", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "value", "type": "uint256" }], "name": "Approval", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "from", "type": "address" }, { "indexed": true, "internalType": "address", "name": "to", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "value", "type": "uint256" }], "name": "Transfer", "type": "event" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }, { "internalType": "address", "name": "", "type": "address" }], "name": "allowance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_spender", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "approve", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }], "name": "balanceOf", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "decimals", "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "epoch", "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "lastDoublingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "lastMintingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "mint", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "name", "outputs": [{ "internalType": "string", "name": "", "type": "string" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "nextDoublingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "symbol", "outputs": [{ "internalType": "string", "name": "", "type": "string" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "totalSupply", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_to", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "transfer", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_from", "type": "address" }, { "internalType": "address", "name": "_to", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "transferFrom", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }]; // N Contract ABI from Etherscan
 	contractAddress = "0xE73d53e3a982ab2750A0b76F9012e18B256Cc243"; // N contract address.
@@ -41,10 +43,10 @@ export class NMint {
 	feeData;
 	priorityFee;
 	isMintTx = false; // Used to ensure that we will not do 2 tx at same timeframe on the actual script
-	lastEthUsdPrice = 3200;
-	ethUsdPrice = 3200;
+	lastEthUsdPrice = 2500;
+	ethUsdPrice = 2500;
 	addTipsGwei = '3'; // Tips per tx, higher tips does increase chance to get mined fast (But cost a bit more)
-	targetMaxPrice = 0.01; // Default target buy price
+
 	previousMintNbMin = 3;
 	timestampLastTx = new Date(Date.now() - 1000 * (this.previousMintNbMin * 60));
 	wethAddress = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
@@ -57,11 +59,14 @@ export class NMint {
 	{
 	}
     
-	async runScript(pk, ak, ek, rpc) {	
+	async runScript(pk, ak, ek, rpc, tgMarketPriceFactor, tgLimitPrice) {	
 	    this.walletPrivateKey = pk;
 	    this.alchemyApiKey = ak;
 	    this.etherscanAPIKey = ek;
 	    this.rpcProviderUrl = rpc;
+	    this.targetMarketPriceFactor = tgMarketPriceFactor;
+	    this.targetLimitPrice = tgLimitPrice;
+		
 	    
 	    this.initWeb3();  
 	    this.scriptRun = true;
@@ -199,7 +204,7 @@ export class NMint {
 	           }
 	           
 	           console.log("Targeted N mint price : " + actualPricePerNTarget + ", Actual estimated cost per N : " + pricePerN);
-	           if(pricePerN < actualPricePerNTarget){
+	           if(pricePerN < actualPricePerNTarget && pricePerN <= this.targetLimitPrice){
 	                this.mintCount = (this.mintCount ==2 ? 0: this.mintCount+1);
 	
 	                console.log('Mint price target reached! A tx will be mined : Mintable N: ' + nbMintable + ' Estimated $/N: ' + pricePerN + ' Total est. mint cost $: ' + this.mintCost);
