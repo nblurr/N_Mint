@@ -208,9 +208,9 @@ export class NMint {
 	           console.log("Targeted N mint price : " + actualPricePerNTarget + ", Actual estimated cost per N : " + pricePerN);
 	           if(pricePerN > actualPricePerNTarget && pricePerN <= this.targetLimitPrice){
 	                this.mintCount = (this.mintCount ==2 ? 0: this.mintCount+1);
-	
+			console.log('NO MINT');
 	                console.log('Mint price target reached! A tx will be mined : Mintable N: ' + nbMintable + ' Estimated $/N: ' + pricePerN + ' Total est. mint cost $: ' + this.mintCost);
-	                /*
+	                /* TEMP NO MINT 
 			 await this.mintTokenOp();
     			*/
 	           }
