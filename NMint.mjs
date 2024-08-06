@@ -324,15 +324,17 @@ export class NMint {
 	
 	    try {
 	        const response = await axios.get(url);
+			console.log('response.data.status ' + response.data.status + ' response.data.result.length ' + response.data.result.length);
 	        if (response.data.status === "1" && response.data.result.length > 0) {
+				console.log('response.data.result ' + JSON.stringify(response.data.result[0]));
 	            const price = response.data.result[0].ethereum.usd;
 	            return price;
 	        } else {
-	            return 3200;
+	            return this.ethUsdPrice;
 	        }
 	    } catch (error) {
 			console.log(error);
-	        return 3200;
+	        return this.ethUsdPrice;
 	    }
 	}
 }
