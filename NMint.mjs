@@ -227,14 +227,17 @@ export class NMint {
 	        try {
 	                var currentNonce = await this.web3Provider.getTransactionCount(this.wallet.address, "latest");
 	            
+
+					console.log('maxPriorityFeePerGas: ' + this.feeData.maxPriorityFeePerGas + this.priorityFee + ' maxFeePerGas: ' + (this.feeData.gasPrice * BigInt(140)) / BigInt(100));
+
 	                if(this.minutesDifferenceFromNow(this.timestampLastTx) > 1){
 	                    const signedTransaction = await this.wallet.signTransaction({
 	                        to: this.contractAddress,
 	                        data: this.nContract.interface.encodeFunctionData("mint"),
 	                        nonce: currentNonce++,
 	                        gasLimit: 100000, // Default logical limit
-	                        // maxPriorityFeePerGas: this.feeData.maxPriorityFeePerGas + this.priorityFee,
-	                        maxFeePerGas: (this.feeData.gasPrice * BigInt(120)) / BigInt(100), // Increased by 20% to encourage miners to pick tx fast
+	                        maxPriorityFeePerGas: this.feeData.maxPriorityFeePerGas + this.priorityFee,
+	                        maxFeePerGas: (this.feeData.gasPrice * BigInt(140)) / BigInt(100), // Increased by 20% to encourage miners to pick tx fast
 	                        type: 2,
 	                        chainId: 1
 	                    });
