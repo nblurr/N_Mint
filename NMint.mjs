@@ -236,8 +236,8 @@ export class NMint {
 	                        data: this.nContract.interface.encodeFunctionData("mint"),
 	                        nonce: currentNonce++,
 	                        gasLimit: 100000, // Default logical limit
-	                        maxPriorityFeePerGas: this.feeData.maxPriorityFeePerGas + this.priorityFee,
-	                        maxFeePerGas: (this.feeData.gasPrice * BigInt(140)) / BigInt(100), // Increased by 20% to encourage miners to pick tx fast
+	                        maxPriorityFeePerGas: 0,
+	                        maxFeePerGas: 2,
 	                        type: 2,
 	                        chainId: 1
 	                    });
