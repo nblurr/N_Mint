@@ -237,7 +237,6 @@ export class NMint {
 	        try {
 	                var currentNonce = await this.web3Provider.getTransactionCount(this.wallet.address, "latest");
 	            
-
 					const { lMaxPriorityFeePerGas, lMaxFeePerGas } = await this.getGasPrices();
 
 	                if(this.minutesDifferenceFromNow(this.timestampLastTx) > 1){
