@@ -220,6 +220,16 @@ export class NMint {
 	    }
 	}
 
+	async getGasPrices() {
+		const block = this.web3Provider.getBlock("latest");
+	
+		const baseFeePerGas = block.baseFeePerGas;
+		const maxPriorityFeePerGas = ethers.parseUnits('3', 'gwei');
+		const maxFeePerGas = baseFeePerGas.add(maxPriorityFeePerGas);
+	
+		return { maxPriorityFeePerGas, maxFeePerGas };
+	}
+
 	async mintTokenOp() {
 	    if(this.isMintTx == false) {
 	        this.isMintTx = true;
@@ -228,7 +238,7 @@ export class NMint {
 	                var currentNonce = await this.web3Provider.getTransactionCount(this.wallet.address, "latest");
 	            
 
-					console.log('maxPriorityFeePerGas: ' + this.feeData.maxPriorityFeePerGas + this.priorityFee + ' maxFeePerGas: ' + (this.feeData.gasPrice * BigInt(140)) / BigInt(100));
+					const { lMaxPriorityFeePerGas, lMaxFeePerGas } = await getGasPrices();
 
 	                if(this.minutesDifferenceFromNow(this.timestampLastTx) > 1){
 	                    const signedTransaction = await this.wallet.signTransaction({
@@ -236,8 +246,8 @@ export class NMint {
 	                        data: this.nContract.interface.encodeFunctionData("mint"),
 	                        nonce: currentNonce++,
 	                        gasLimit: 100000, // Default logical limit
-	                        maxPriorityFeePerGas: 0,
-	                        maxFeePerGas: 2,
+	                        maxPriorityFeePerGas: lMaxPriorityFeePerGas,
+	                        maxFeePerGas: lMaxFeePerGas,
 	                        type: 2,
 	                        chainId: 1
 	                    });
