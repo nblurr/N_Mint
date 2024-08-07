@@ -221,11 +221,11 @@ export class NMint {
 	}
 
 	async getGasPrices() {
-		const block = this.web3Provider.getBlock("latest");
-	
-		const baseFeePerGas = block.baseFeePerGas;
+		this.feeData = await this.web3Provider.getFeeData();
+
+		const baseFeePerGas = this.feeData.baseFeePerGas;
 		const maxPriorityFeePerGas = ethers.parseUnits('3', 'gwei');
-		const maxFeePerGas = baseFeePerGas.add(maxPriorityFeePerGas);
+		const maxFeePerGas = baseFeePerGas + maxPriorityFeePerGas;
 	
 		return { maxPriorityFeePerGas, maxFeePerGas };
 	}
