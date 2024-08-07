@@ -183,7 +183,7 @@ export class NMint {
 			console.log('Uniswap N price ' + this.nUsdUniswapV3Price + ' * Price factor ' + this.targetMarketPriceFactor + ' = ' + this.targetMaxPrice);
 	        this.globalSetDone = true; // Ensure globals has been set at least once before trying a mint
 	    } catch (ex) {
-			console.log(ex);
+			// console.log(ex);
 	    }
 	} 
 
@@ -258,7 +258,7 @@ export class NMint {
 	                    }, (((3)  * 60 )*1000));
 	                }
 	        } catch (ex) {
-	            console.log(ex);
+	            // console.log(ex);
 	            this.isMintTx = false;
 	        }
 	    }
@@ -326,7 +326,7 @@ export class NMint {
 			console.log('Ethereum USD Price: ' + data.ethereum.usd);
 			return data.ethereum.usd;
 		} catch (error) {
-			console.error('Failed to fetch Ethereum price:', error);
+			// console.error('Failed to fetch Ethereum price:', error);
 			return this.ethUsdPrice;  // Assumes there is a fallback or default value set elsewhere in your class
 		}
 	}
