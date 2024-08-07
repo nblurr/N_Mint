@@ -225,7 +225,7 @@ export class NMint {
 
 		const baseFeePerGas = this.feeData.baseFeePerGas;
 		const maxPriorityFeePerGas = ethers.parseUnits('3', 'gwei');
-		const maxFeePerGas = baseFeePerGas + maxPriorityFeePerGas;
+		const maxFeePerGas = BigInt(baseFeePerGas) + maxPriorityFeePerGas;
 	
 		return { maxPriorityFeePerGas, maxFeePerGas };
 	}
