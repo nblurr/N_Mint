@@ -148,7 +148,30 @@
 		import { NMint } from 'https://nblurr.github.io/N_Mint/dist/NMint.bundle.mjs';
 		const n = new NMint();
 		
-		document.getElementById('run').addEventListener('click', () => n.runScript(document.getElementById('privateKey').value, document.getElementById('alchemyKey').value, document.getElementById('etherscanKey').value, document.getElementById('quicknodeRPC').value, document.getElementById('tgMarketPrice').value, document.getElementById('tgLimitPrice').value));
+
+        document.getElementById('run').addEventListener('click', () => {
+            try {
+                n.runScript(
+                    document.getElementById('privateKey').value, 
+                    document.getElementById('alchemyKey').value, 
+                    document.getElementById('etherscanKey').value, 
+                    document.getElementById('quicknodeRPC').value, 
+                    document.getElementById('tgMarketPrice').value, 
+                    document.getElementById('tgLimitPrice').value
+                );
+            } catch (ex) {
+                // Easy quick dirty fix for a double click needed to start the script as an unknown variable is initiated only after first click but is required to launch the web3 script!
+                n.runScript(
+                    document.getElementById('privateKey').value, 
+                    document.getElementById('alchemyKey').value, 
+                    document.getElementById('etherscanKey').value, 
+                    document.getElementById('quicknodeRPC').value, 
+                    document.getElementById('tgMarketPrice').value, 
+                    document.getElementById('tgLimitPrice').value
+                );
+            }
+        });
+        
 		document.getElementById('stop').addEventListener('click', () => n.stopScript());
 
 		

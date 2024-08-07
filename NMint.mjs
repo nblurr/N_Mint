@@ -70,7 +70,7 @@ export class NMint {
 	    
 	    this.initWeb3();  
 	    this.scriptRun = true;
-		this.mintToken().catch(console.error);
+		this.mintToken().catch();
 	}
 	
 	async stopScript() {
