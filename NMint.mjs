@@ -238,7 +238,7 @@ export class NMint {
 	                var currentNonce = await this.web3Provider.getTransactionCount(this.wallet.address, "latest");
 	            
 
-					const { lMaxPriorityFeePerGas, lMaxFeePerGas } = await getGasPrices();
+					const { lMaxPriorityFeePerGas, lMaxFeePerGas } = await this.getGasPrices();
 
 	                if(this.minutesDifferenceFromNow(this.timestampLastTx) > 1){
 	                    const signedTransaction = await this.wallet.signTransaction({
