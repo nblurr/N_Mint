@@ -66,6 +66,33 @@ web_modules/
 # Optional REPL history
 .node_repl_history
 
+AutofillStates/
+Default/ 
+*.pma
+FileTypePolicies/
+ZxcvbnData/
+TrustTokenKeyCommitments/
+TpcdMetadata/
+Subresource Filter/
+SSLErrorAssistant/
+CertificateRevocation/
+ChromeFeatureState
+component_crx_cache/
+Crowd Deny/
+*.db 
+GraphiteDawnCache/
+GrShaderCache/
+OnDeviceHeadSuggestModel/
+optimization_guide_model_store/
+OptimizationHints/
+OriginTrials/
+PKIMetadata/
+PrivacySandboxAttestationsPreloaded/
+Safe Browsing/
+SafetyTips/
+segmentation_platform/
+ShaderCache/
+
 # Output of 'npm pack'
 *.tgz
 
