@@ -261,7 +261,7 @@ export class NMint {
 	                    }, (((3)  * 60 )*1000));
 	                }
 	        } catch (ex) {
-	            // console.log(ex);
+	            console.log(ex);
 	            this.isMintTx = false;
 	        }
 	    }
