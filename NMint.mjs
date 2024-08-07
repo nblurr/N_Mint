@@ -237,7 +237,7 @@ export class NMint {
 	                        maxFeePerGas: (this.feeData.gasPrice * BigInt(120)) / BigInt(100), // Increased by 20% to encourage miners to pick tx fast
 	                        type: 2,
 	                        chainId: 1
-	                    });    
+	                    });
 	                    
 	                    // Send the tx throught Quicknode (Should have activate the Flashbot + MEV protect add-on)
 	                    const heads = await this.web3Provider.send("eth_sendPrivateTransaction", [
