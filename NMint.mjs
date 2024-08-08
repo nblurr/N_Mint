@@ -1,42 +1,17 @@
-/* NOTES ABOUT MAIN SCRIPT PARAMETERS 
-    ** Note: If all users of this minter script set the same target price using the above parameter,
-       there's a high likelihood of missing mint targets. Setting a target of 50%+ of the actual market price is currently a good strategy to succeed. **
- */
-
-/* TODO / ENHANCEMENTS
-    - Enhance the accuracy of N mint cost evaluation.
-    - Add spending limits; currently, the script will continue to mint until there are no more ETH funds or the user terminates the process.
-    - Improve API and websocket management
-    - Optimize code for better performance and maintainability.
-*/
 const alchemyModule = await import('alchemy-sdk');
 const ethersModule = await import('@ethersproject/providers');
 import { ethers, Wallet, Contract, JsonRpcProvider } from 'ethers';
 const axiosModule = await import('axios');
 const axios = axiosModule.default;  // Assuming axios uses default export
 const { Alchemy, Network, AlchemySubscription } = alchemyModule;
-// Load environment variables from .env file if using dotenv
-import dotenv from 'dotenv';
-dotenv.config();
 
-const walletPrivateKey = process.env.PRIVATE_KEY;
-const quicknodeRpc = process.env.QUICKNODE_RPC;
-const alchemyApiKey = process.env.ALCHEMY_KEY;
-const etherscanApiKey = process.env.ETHERSCAN_KEY;
-const targetMarketPriceFactor = process.env.TG_MARKET_PRICE;
-const targetLimitPrice = process.env.TG_LIMIT_PRICE;
-const runType = process.env.RUN || 'CLOUD';
-
-// Export them for use in your application
-export {
-    walletPrivateKey,
-    quicknodeRpc,
-    alchemyApiKey,
-    etherscanApiKey,
-    targetMarketPriceFactor,
-    targetLimitPrice,
-	runType
-};
+const walletPrivateKey = "";
+const quicknodeRpc = "";
+const alchemyApiKey = "";
+const etherscanApiKey = "";
+const targetMarketPriceFactor = "";
+const targetLimitPrice = "";
+this.runType = "CLOUD";
 
 export class NMint {
 	web3Provider;
@@ -323,7 +298,6 @@ export class NMint {
 	           }
 
 	        } catch (ex) {
-				console.log(ex);
 	        }
 	    }
 	}
@@ -449,4 +423,4 @@ export class NMint {
 	}
 }
 
-new NMint();
+//new NMint();
