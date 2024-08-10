@@ -81,7 +81,7 @@ export class NMint {
 
     constructor() 
 	{
-		console.log('Private Key:', this.walletPrivateKey);
+		console.log('Private Key:', 'SECRET');
 		console.log('Quicknode RPC:', this.rpcProviderUrl);
 		console.log('Alchemy API Key:', this.alchemyApiKey);
 		console.log('Etherscan API Key:', this.etherscanAPIKey);

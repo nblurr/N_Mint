@@ -1,4 +1,5 @@
 # Logs
+NMint_local.mjsq
 logs
 *.log
 npm-debug.log*
@@ -68,6 +69,7 @@ web_modules/
 
 AutofillStates/
 Default/ 
+FirstPartySetsPreloaded/
 *.pma
 FileTypePolicies/
 ZxcvbnData/

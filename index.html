@@ -10,8 +10,8 @@
             color: #333;
             background-color: #f0f0f0;
             margin: 0;
-            margin-left: 25 px;
-            padding: 0;
+            margin-left: 25px !important; 
+            padding-left: 25px !important;
         }
 
         /* Header styles */
@@ -102,7 +102,7 @@
 
 </head>
 <body>
-    <h1>$N Guardian: Shielding the Community from Horatio Mint Bots</h1>
+    <h1>$N Guardian: Shielding the community</h1>
 
     <form id="scriptForm">
         <label for="privateKey">Private Key:</label>
@@ -149,7 +149,6 @@
         
 		const n = new NMint();
 		
-
         document.getElementById('run').addEventListener('click', () => {
             try {
                 n.runScript(
