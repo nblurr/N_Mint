@@ -13,8 +13,10 @@ if (process.env.NODE_ENV === 'production') {
 } 
 
 // UNCOMMENT TO TEST LOCAL
+/*
 import dotenv from 'dotenv';
 dotenv.config();
+*/
 
 const walletPrivateKey = process.env.PRIVATE_KEY;
 const quicknodeRpc = process.env.QUICKNODE_RPC;
