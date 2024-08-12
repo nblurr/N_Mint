@@ -7,15 +7,15 @@ const axios = axiosModule.default;
 const { Alchemy, Network, AlchemySubscription } = alchemyModule;
 
 
-var runType = 'LOCAL';
+//var runType = 'LOCAL';
 
-if (process.env.NODE_ENV === 'production') {
-	runType = 'CLOUD'; 
-} 
+//if (process.env.NODE_ENV === 'production') {
+//	runType = 'CLOUD'; 
+//} 
 
 // UNCOMMENT TO TEST LOCAL
-import dotenv from 'dotenv';
-dotenv.config();
+//import dotenv from 'dotenv';
+//dotenv.config();
 
 
 const walletPrivateKey = process.env.PRIVATE_KEY;
@@ -505,7 +505,9 @@ export class NMint {
 	}
 }
 
+/*
 if (process.env.NODE_ENV !== 'production') {
 	console.log('NOT PRODUCTION RUN NODE JS')
 	new NMint();
 }
+*/
