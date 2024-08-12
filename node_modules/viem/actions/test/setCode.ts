@@ -23,7 +23,7 @@ export type SetCodeErrorType = RequestErrorType | ErrorType
 /**
  * Modifies the bytecode stored at an account's address.
  *
- * - Docs: https://viem.sh/docs/actions/test/setCode.html
+ * - Docs: https://viem.sh/docs/actions/test/setCode
  *
  * @param client - Client to use
  * @param parameters – {@link SetCodeParameters}
@@ -44,10 +44,10 @@ export type SetCodeErrorType = RequestErrorType | ErrorType
  * })
  */
 export async function setCode<
-  TChain extends Chain | undefined,
-  TAccount extends Account | undefined,
+  chain extends Chain | undefined,
+  account extends Account | undefined,
 >(
-  client: TestClient<TestClientMode, Transport, TChain, TAccount, false>,
+  client: TestClient<TestClientMode, Transport, chain, account, false>,
   { address, bytecode }: SetCodeParameters,
 ) {
   await client.request({

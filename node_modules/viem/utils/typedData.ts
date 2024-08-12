@@ -1,9 +1,4 @@
-import type {
-  TypedData,
-  TypedDataDomain,
-  TypedDataParameter,
-  TypedDataType,
-} from 'abitype'
+import type { TypedData, TypedDataDomain, TypedDataParameter } from 'abitype'
 
 import { BytesSizeMismatchError } from '../errors/abi.js'
 import { InvalidAddressError } from '../errors/address.js'
@@ -19,6 +14,51 @@ import {
   type HashDomainErrorType,
   hashDomain,
 } from './signature/hashTypedData.js'
+import { stringify } from './stringify.js'
+
+export type SerializeTypedDataErrorType =
+  | HashDomainErrorType
+  | IsAddressErrorType
+  | NumberToHexErrorType
+  | SizeErrorType
+  | ErrorType
+
+export function serializeTypedData<
+  const typedData extends TypedData | Record<string, unknown>,
+  primaryType extends keyof typedData | 'EIP712Domain',
+>(parameters: TypedDataDefinition<typedData, primaryType>) {
+  const {
+    domain: domain_,
+    message: message_,
+    primaryType,
+    types,
+  } = parameters as unknown as TypedDataDefinition
+
+  const normalizeData = (
+    struct: readonly TypedDataParameter[],
+    data_: Record<string, unknown>,
+  ) => {
+    const data = { ...data_ }
+    for (const param of struct) {
+      const { name, type } = param
+      if (type === 'address') data[name] = (data[name] as string).toLowerCase()
+    }
+    return data
+  }
+
+  const domain = (() => {
+    if (!types.EIP712Domain) return {}
+    if (!domain_) return {}
+    return normalizeData(types.EIP712Domain, domain_)
+  })()
+
+  const message = (() => {
+    if (primaryType === 'EIP712Domain') return undefined
+    return normalizeData(types[primaryType], message_)
+  })()
+
+  return stringify({ domain, message, primaryType, types })
+}
 
 export type ValidateTypedDataErrorType =
   | HashDomainErrorType
@@ -28,24 +68,19 @@ export type ValidateTypedDataErrorType =
   | ErrorType
 
 export function validateTypedData<
-  const TTypedData extends TypedData | { [key: string]: unknown },
-  TPrimaryType extends string = string,
->({
-  domain,
-  message,
-  primaryType,
-  types: types_,
-}: TypedDataDefinition<TTypedData, TPrimaryType>) {
-  const types = types_ as TypedData
+  const typedData extends TypedData | Record<string, unknown>,
+  primaryType extends keyof typedData | 'EIP712Domain',
+>(parameters: TypedDataDefinition<typedData, primaryType>) {
+  const { domain, message, primaryType, types } =
+    parameters as unknown as TypedDataDefinition
 
   const validateData = (
     struct: readonly TypedDataParameter[],
-    value_: Record<string, unknown>,
+    data: Record<string, unknown>,
   ) => {
     for (const param of struct) {
-      const { name, type: type_ } = param
-      const type = type_ as TypedDataType
-      const value = value_[name]
+      const { name, type } = param
+      const value = data[name]
 
       const integerMatch = type.match(integerRegex)
       if (
@@ -57,7 +92,7 @@ export function validateTypedData<
         // and will throw.
         numberToHex(value, {
           signed: base === 'int',
-          size: parseInt(size_) / 8,
+          size: Number.parseInt(size_) / 8,
         })
       }
 
@@ -67,9 +102,9 @@ export function validateTypedData<
       const bytesMatch = type.match(bytesRegex)
       if (bytesMatch) {
         const [_type, size_] = bytesMatch
-        if (size_ && size(value as Hex) !== parseInt(size_))
+        if (size_ && size(value as Hex) !== Number.parseInt(size_))
           throw new BytesSizeMismatchError({
-            expectedSize: parseInt(size_),
+            expectedSize: Number.parseInt(size_),
             givenSize: size(value as Hex),
           })
       }
@@ -82,18 +117,15 @@ export function validateTypedData<
   // Validate domain types.
   if (types.EIP712Domain && domain) validateData(types.EIP712Domain, domain)
 
-  if (primaryType !== 'EIP712Domain') {
-    // Validate message types.
-    const type = types[primaryType]
-    validateData(type, message as Record<string, unknown>)
-  }
+  // Validate message types.
+  if (primaryType !== 'EIP712Domain') validateData(types[primaryType], message)
 }
 
 export type GetTypesForEIP712DomainErrorType = ErrorType
 
 export function getTypesForEIP712Domain({
   domain,
-}: { domain?: TypedDataDomain }): TypedDataParameter[] {
+}: { domain?: TypedDataDomain | undefined }): TypedDataParameter[] {
   return [
     typeof domain?.name === 'string' && { name: 'name', type: 'string' },
     domain?.version && { name: 'version', type: 'string' },
