@@ -2,21 +2,21 @@ const alchemyModule = await import('alchemy-sdk');
 const ethersModule = await import('@ethersproject/providers');
 import { ethers, Wallet, Contract, JsonRpcProvider } from 'ethers';
 const axiosModule = await import('axios');
-const axios = axiosModule.default;  // Assuming axios uses default export
+const cheerio = await import('cheerio');
+const axios = axiosModule.default; 
 const { Alchemy, Network, AlchemySubscription } = alchemyModule;
 
 
-var runType = 'CLOUD';
+var runType = 'LOCAL';
 
 if (process.env.NODE_ENV === 'production') {
-	runType = 'CLOUD';
+	runType = 'CLOUD'; 
 } 
 
 // UNCOMMENT TO TEST LOCAL
-/*
 import dotenv from 'dotenv';
 dotenv.config();
-*/
+
 
 const walletPrivateKey = process.env.PRIVATE_KEY;
 const quicknodeRpc = process.env.QUICKNODE_RPC;
@@ -113,6 +113,29 @@ export class NMint {
 	    this.scriptRun = false;
 	}
 	
+	async fetchTransactionFee(txHash) {
+		const url = `https://etherscan.io/tx/${txHash}`;
+		
+		try {
+			// Fetch the transaction page
+			const response = await axios.get(url);
+			const data = response.data;
+			
+			// Load the HTML into cheerio
+			const $ = cheerio.load(data);
+	
+			// Extract the transaction fee
+			// This assumes the transaction fee is within a <td> with specific text
+			const txnFee = $('#ContentPlaceHolder1_spanTxFee > div > span:nth-child(2)').text().replace('($','').replace(')','');
+	
+			console.log(`Transaction Fee for ${txHash}: ${txnFee}`);
+	
+			return txnFee;
+		} catch (error) {
+			console.error('Error fetching transaction fee:', error.message);
+		}
+	}
+
 	calculateTransactionCostTx(tx) {
 		console.log(tx.transaction.hash)
 		this.web3Provider.getTransactionReceipt(tx.transaction.hash, (err, txReceipt) => {
@@ -169,7 +192,7 @@ export class NMint {
 		    hashesOnly: false,
 		  },
 		  
-		  (tx) => {
+		  async (tx) => {
 			try {
 				this.timestampLastTx = Date.now();
 
@@ -178,12 +201,15 @@ export class NMint {
 				console.log('');
 				console.log('MINT TX');
 				console.log('');
+				
+				var fethedGasFees = await this.fetchTransactionFee(tx.transaction.hash);				
 
 				if(tx.transaction.from.toLowerCase() == this.wallet.address.toLowerCase()) {
 					this.sumMintN += this.nbMintableBeforeCallFromMyWallet;
-					this.sumMintPrice += this.mintCost;
 
-					console.log('** SUMMARY: N minted = ' + this.sumMintN + ', txPrice = ' + this.mintCost + ' **');
+					this.sumMintPrice += fethedGasFees;
+
+					console.log('** SUMMARY: N minted = ' + this.sumMintN + ', txPrice = ' + this.mintCost + ', Total Mint Cost = ' + this.sumMintPrice + ', AVG $/N = ' + (this.sumMintPrice/this.sumMintN) + ' **');
 					// + ' Mint total cost = ' + this.sumMintPrice + ', Mint cost/N = ' + (this.sumMintPrice/this.sumMintN) + ' **');
 				}
 
