@@ -6,12 +6,12 @@ const cheerio = await import('cheerio');
 const axios = axiosModule.default; 
 const { Alchemy, Network, AlchemySubscription } = alchemyModule;
 
-const walletPrivateKey = '';
-const quicknodeRpc = '';
-const alchemyApiKey = '';
-const etherscanApiKey = '';
-const targetMarketPriceFactor = '';
-const targetLimitPrice = '';
+const walletPrivateKey = ''; 
+const quicknodeRpc = ''; 
+const alchemyApiKey = ''; 
+const etherscanApiKey = ''; 
+const targetMarketPriceFactor = ''; 
+const targetLimitPrice = ''; 
 
 export {
     walletPrivateKey,
