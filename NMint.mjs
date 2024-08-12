@@ -70,18 +70,6 @@ export class NMint {
 
     constructor() 
 	{
-		console.log('Private Key:', 'SECRET');
-		console.log('Quicknode RPC:', this.rpcProviderUrl);
-		console.log('Alchemy API Key:', this.alchemyApiKey);
-		console.log('Etherscan API Key:', this.etherscanAPIKey);
-		console.log('Target Market Price Factor:', this.targetMarketPriceFactor);
-		console.log('Target Limit Price:', this.targetLimitPrice);
-		console.log('');
-
-		if(this.runType == 'LOCAL') {
-			this.initWeb3();
-			this.mintToken().catch();
-		}
 	}
 
 	async runScript(pk, ak, ek, rpc, tgMarketPriceFactor, tgLimitPrice) {	
