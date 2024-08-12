@@ -6,7 +6,7 @@ const axios = axiosModule.default;  // Assuming axios uses default export
 const { Alchemy, Network, AlchemySubscription } = alchemyModule;
 
 
-const runType = 'LOCAL';
+var runType = 'CLOUD';
 
 if (process.env.NODE_ENV === 'production') {
 	runType = 'CLOUD';
