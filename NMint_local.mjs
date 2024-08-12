@@ -181,7 +181,8 @@ export class NMint {
 					this.sumMintN += this.nbMintableBeforeCallFromMyWallet;
 					this.sumMintPrice += this.mintCost;
 
-					console.log('** SUMMARY: N minted = ' + this.sumMintN + ', txPrice = ' + this.mintCost + ' Mint total cost = ' + this.sumMintPrice + ', Mint cost/N = ' + (this.sumMintPrice/this.sumMintN) + ' **');
+					console.log('** SUMMARY: N minted = ' + this.sumMintN + ', txPrice = ' + this.mintCost + ' **');
+					// + ' Mint total cost = ' + this.sumMintPrice + ', Mint cost/N = ' + (this.sumMintPrice/this.sumMintN) + ' **');
 				}
 
 				console.log("** N Contract MINT succeed: " + new Date().toLocaleTimeString() + " From: " + tx.transaction.from + " Minted: " + this.nbMintableBeforeZero + " maxFeePerGas: " + this.hexToGwei(tx.transaction.maxFeePerGas) + " maxPriorityFeePerGas: " + this.hexToGwei(tx.transaction.maxPriorityFeePerGas) + " Mint cost: " + this.mintCost + "$ **"); 
