@@ -6,18 +6,6 @@ const cheerio = await import('cheerio');
 const axios = axiosModule.default; 
 const { Alchemy, Network, AlchemySubscription } = alchemyModule;
 
-
-//var runType = 'LOCAL';
-
-//if (process.env.NODE_ENV === 'production') {
-//	runType = 'CLOUD'; 
-//} 
-
-// UNCOMMENT TO TEST LOCAL
-//import dotenv from 'dotenv';
-//dotenv.config();
-
-
 const walletPrivateKey = process.env.PRIVATE_KEY;
 const quicknodeRpc = process.env.QUICKNODE_RPC;
 const alchemyApiKey = process.env.ALCHEMY_KEY;
@@ -31,8 +19,7 @@ export {
     alchemyApiKey,
     etherscanApiKey,
     targetMarketPriceFactor,
-    targetLimitPrice,
-    runType
+    targetLimitPrice
 };
 
 export class NMint {
@@ -504,10 +491,3 @@ export class NMint {
 		}
 	}
 }
-
-/*
-if (process.env.NODE_ENV !== 'production') {
-	console.log('NOT PRODUCTION RUN NODE JS')
-	new NMint();
-}
-*/
