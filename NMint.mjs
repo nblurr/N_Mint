@@ -6,12 +6,12 @@ const cheerio = await import('cheerio');
 const axios = axiosModule.default; 
 const { Alchemy, Network, AlchemySubscription } = alchemyModule;
 
-const walletPrivateKey = process.env.PRIVATE_KEY;
-const quicknodeRpc = process.env.QUICKNODE_RPC;
-const alchemyApiKey = process.env.ALCHEMY_KEY;
-const etherscanApiKey = process.env.ETHERSCAN_KEY;
-const targetMarketPriceFactor = process.env.TG_MARKET_PRICE;
-const targetLimitPrice = process.env.TG_LIMIT_PRICE;
+const walletPrivateKey = '';
+const quicknodeRpc = '';
+const alchemyApiKey = '';
+const etherscanApiKey = '';
+const targetMarketPriceFactor = '';
+const targetLimitPrice = '';
 
 export {
     walletPrivateKey,
