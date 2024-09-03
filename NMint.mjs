@@ -12,6 +12,25 @@ import dotenv from 'dotenv';
 dotenv.config();
 */
 
+
+const walletPrivateKey = '';
+const quicknodeRpc = 'https://fluent-fabled-sailboat.quiknode.pro/4003c6afdeb4aae9e3281e1d7f4db56213852b5f/';
+const alchemyApiKey = 'S_RBXZmrSlFXkr4epQJtR65bnSqtX7VL';
+const etherscanApiKey = 'AZ951U44JNQ6QKKK5BRQTK377E6IBFVXDP';
+const targetMarketPriceFactor = '0.8';
+const targetLimitPrice = '0.15';
+const rpcPace = 250;
+
+export {
+    walletPrivateKey,
+    quicknodeRpc,
+    alchemyApiKey,
+    etherscanApiKey,
+    targetMarketPriceFactor,
+    targetLimitPrice,
+	rpcPace
+};
+
 export class NMint {
 	web3Provider;
 	settings;
@@ -558,25 +577,6 @@ export class NMint {
 // UNCOMMENT TO TEST LOCAL
 
 /*
-
-const walletPrivateKey = process.env.PRIVATE_KEY;
-const quicknodeRpc = process.env.QUICKNODE_RPC;
-const alchemyApiKey = process.env.ALCHEMY_KEY;
-const etherscanApiKey = process.env.ETHERSCAN_KEY;
-const targetMarketPriceFactor = process.env.TG_MARKET_PRICE;
-const targetLimitPrice = process.env.TG_LIMIT_PRICE;
-const rpcPace = process.env.RPC_PACE;
-
-export {
-    walletPrivateKey,
-    quicknodeRpc,
-    alchemyApiKey,
-    etherscanApiKey,
-    targetMarketPriceFactor,
-    targetLimitPrice,
-	rpcPace
-};
-
 var $script = new NMint();
 
 $script.initWeb3();
