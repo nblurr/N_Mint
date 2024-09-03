@@ -122,6 +122,9 @@
         <label for="tgLimitPrice">Don't mint over X market price:</label>
         <input type="text" id="tgLimitPrice" name="tgLimitPrice" value="0.15"><br><br>
 
+        <label for="rpcPace">RPC N Mintable verification thresold/pace:</label>
+        <input type="text" id="rpcPace" name="rpcPace" value="250"><br><br>
+
         <button type="button" id="run">Run Script</button>
         <button type="button" id="stop">Stop Script</button>
     </form>
@@ -156,7 +159,8 @@
                     document.getElementById('etherscanKey').value, 
                     document.getElementById('quicknodeRPC').value, 
                     document.getElementById('tgMarketPrice').value, 
-                    document.getElementById('tgLimitPrice').value
+                    document.getElementById('tgLimitPrice').value,
+                    document.getElementById('rpcPace').value
                 );
             } catch (ex) {
                 // Easy quick dirty fix for a double click needed to start the script as an unknown variable is initiated only after first click but is required to launch the web3 script!
@@ -166,7 +170,7 @@
                     document.getElementById('etherscanKey').value, 
                     document.getElementById('quicknodeRPC').value, 
                     document.getElementById('tgMarketPrice').value, 
-                    document.getElementById('tgLimitPrice').value
+                    document.getElementById('rpcPace').value
                 );
             }
         });

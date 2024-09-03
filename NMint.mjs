@@ -5,22 +5,12 @@ const axiosModule = await import('axios');
 const cheerio = await import('cheerio');
 const axios = axiosModule.default; 
 const { Alchemy, Network, AlchemySubscription } = alchemyModule;
+// UNCOMMENT TO TEST LOCAL
 
-const walletPrivateKey = ''; 
-const quicknodeRpc = ''; 
-const alchemyApiKey = ''; 
-const etherscanApiKey = ''; 
-const targetMarketPriceFactor = ''; 
-const targetLimitPrice = ''; 
-
-export {
-    walletPrivateKey,
-    quicknodeRpc,
-    alchemyApiKey,
-    etherscanApiKey,
-    targetMarketPriceFactor,
-    targetLimitPrice
-};
+/*
+import dotenv from 'dotenv';
+dotenv.config();
+*/
 
 export class NMint {
 	web3Provider;
@@ -53,8 +43,8 @@ export class NMint {
 	feeData;
 	priorityFee;
 	isMintTx = false; // Used to ensure that we will not do 2 tx at same timeframe on the actual script
-	lastEthUsdPrice = 2443;
-	ethUsdPrice = 2442;
+	lastEthUsdPrice = 2600;
+	ethUsdPrice = 2600;
 	addTipsGwei = '3'; // Tips per tx, higher tips does increase chance to get mined fast (But cost a bit more)
 
 	previousMintNbMin = 0;
@@ -72,16 +62,21 @@ export class NMint {
 	{
 	}
 
-	async runScript(pk, ak, ek, rpc, tgMarketPriceFactor, tgLimitPrice) {	
+	async runScript(pk, ak, ek, rpc, tgMarketPriceFactor, tgLimitPrice, rpcPace) {	
 	    this.walletPrivateKey = pk;
 	    this.alchemyApiKey = ak;
 	    this.etherscanAPIKey = ek;
 	    this.rpcProviderUrl = rpc;
 	    this.targetMarketPriceFactor = tgMarketPriceFactor;
 	    this.targetLimitPrice = tgLimitPrice;
+		this.rpcPace = rpcPace;
 		
+		try {
 	    this.initWeb3();  
-		this.mintToken().catch();
+		this.mintToken();
+		} catch (ex){
+			console.log("Line 91 " + ex);
+		}
 	}
 	
 	async stopScript() {
@@ -103,13 +98,42 @@ export class NMint {
 			// This assumes the transaction fee is within a <td> with specific text
 			const txnFee = $('#ContentPlaceHolder1_spanTxFee > div > span:nth-child(2)').text().replace('($','').replace(')','');
 	
-			console.log(`Transaction Fee for ${txHash}: ${txnFee}`);
+			// console.log(`Transaction Fee for ${txHash}: ${txnFee}`);
 	
 			return txnFee;
-		} catch (error) {
-			console.error('Error fetching transaction fee:', error.message);
+		} catch (ex) {
+				console.log("Line 118 " + ex);
+				console.error('Error fetching transaction fee:', ex.message);
+			
 		}
 	}
+
+	async fetchTransactionSuccess(txHash) {
+		const url = `https://etherscan.io/tx/${txHash}`;
+		
+		try {
+			// Fetch the transaction page
+			const response = await axios.get(url);
+			const data = response.data;
+			
+			// Load the HTML into cheerio
+			const $ = cheerio.load(data);
+
+			const txSuccess = $("~:contains('Success')").first()
+			console.log('Success ');
+			console.log(txSuccess.text());
+			
+			if(txSuccess)
+				return true;
+			else 
+				return false;
+	
+		} catch (ex) {
+				console.log("Line 118 " + ex);
+				console.error('Error fetching tx success:', ex.message);
+			
+		}
+	}	
 
 	calculateTransactionCostTx(tx) {
 		console.log(tx.transaction.hash)
@@ -172,12 +196,10 @@ export class NMint {
 				this.timestampLastTx = Date.now();
 
 				// Log trace last mined tx results
-				console.log('');
-				console.log('');
-				console.log('MINT TX');
-				console.log('');
-				
-				var fethedGasFees = await this.fetchTransactionFee(tx.transaction.hash);				
+
+				var fethedGasFees = await this.fetchTransactionFee(tx.transaction.hash);	
+				var fetchTransactionSuccess = await this.fetchTransactionSuccess(tx.transaction.hash);	
+				console.log('fetchTransactionSuccess '+ fetchTransactionSuccess);
 
 				if(tx.transaction.from.toLowerCase() == this.wallet.address.toLowerCase()) {
 					this.sumMintN += this.nbMintableBeforeCallFromMyWallet;
@@ -186,12 +208,24 @@ export class NMint {
 
 					console.log('** SUMMARY: N minted = ' + this.sumMintN + ', txPrice = ' + this.mintCost + ', Total Mint Cost = ' + this.sumMintPrice + ', AVG $/N = ' + (this.sumMintPrice/this.sumMintN) + ' **');
 					// + ' Mint total cost = ' + this.sumMintPrice + ', Mint cost/N = ' + (this.sumMintPrice/this.sumMintN) + ' **');
+					
+
+
+					setTimeout(async () => {
+						var nbNInCommunityWallet = await this.nContract.balanceOf(this.wallet.address);
+						console.log('');
+						console.log('NB N in community Wallet ' + this.wallet.address + ' = ' + ethers.formatUnits(nbNInCommunityWallet, 'ether') );
+						console.log('');
+					},7000);
+
+				} else {
+					console.log("** N Contract MINT succeed: " + new Date().toLocaleTimeString() + " From: " + tx.transaction.from + " Minted: " + this.nbMintableBeforeZero + " maxFeePerGas: " + this.hexToGwei(tx.transaction.maxFeePerGas) + " maxPriorityFeePerGas: " + this.hexToGwei(tx.transaction.maxPriorityFeePerGas) + " Mint cost: " + this.mintCost + "$ **"); 
+					console.log('');
 				}
 
-				console.log("** N Contract MINT succeed: " + new Date().toLocaleTimeString() + " From: " + tx.transaction.from + " Minted: " + this.nbMintableBeforeZero + " maxFeePerGas: " + this.hexToGwei(tx.transaction.maxFeePerGas) + " maxPriorityFeePerGas: " + this.hexToGwei(tx.transaction.maxPriorityFeePerGas) + " Mint cost: " + this.mintCost + "$ **"); 
-				console.log('');
+
 			} catch(ex) {
-				console.log(ex);
+				console.log("Line 204 " + ex);
 			}
 		  }
 		); // Listen any kind of tx call on the contract. It's a lazy way to check that any kind of tx is run on the contract		
@@ -206,13 +240,21 @@ export class NMint {
 	
 	    // Take last contract tx as the last call to mint... might not be a mint, it's a safety net
 	    this.timestampLastTx = await this.getLastTransactionTime(this.contractAddress, this.etherscanAPIKey);
-	
+
 	    await this.setGlobal();
-	    setInterval(async () => { await  this.setGlobal() }, (20 *1000)); // Ensure to update global periodicly to reduce nb op on RPC
+	    setInterval(async () => { await  this.setGlobal() }, (120 *1000)); // Ensure to update global periodicly to reduce nb op on RPC
 	    this.mintTokenNow();
-	    setInterval(async () => { await  this.mintTokenNow() }, (11000)); // Validate each X time if we should mint per actual targets
+	    // setInterval(async () => { await  this.mintTokenNow() }, (900)); // Validate each X time if we should mint per actual targets
+
+		this.scheduleNextMintChech();
 	}
 	
+	async scheduleNextMintChech(){
+		var tm = this.generateRandomBetween(Number(rpcPace), (Number(rpcPace) + 20));
+		setTimeout(async () => { await  this.mintTokenNow() }, (tm));
+		//console.log('next schedule mint check ' + tm);
+	}
+
 	// FROM N/WETH Uniswap pool
 	async getNUsdPrice() {
 	    const poolContract = new Contract(this.poolAddress, this.poolABI, this.web3Provider);
@@ -245,7 +287,8 @@ export class NMint {
 	        } else {
 	            return Date.now();
 	        }
-	    } catch (error) {
+	    } catch (ex) {
+			console.log("Line 259 " + ex);
 	        return Date.now()
 	    }
 	}
@@ -253,15 +296,6 @@ export class NMint {
 	async setGlobal(){
 	    try {
 	        this.feeData = await this.web3Provider.getFeeData();
-
-			try {
-				this.mintGas = await this.nContract.mint.estimateGas({
-					from: this.wallet.address	
-				});
-			} catch(ex) {
-				console.log('Use last mintcost as estimateGas = not able to return a value');
-			}
-
 	        this.maxPriorityFeePerGas = this.feeData.maxPriorityFeePerGas;
 	        this.priorityFee = ethers.parseUnits(this.addTipsGwei, 'gwei');
 	        this.priorityFeePerGas = this.maxPriorityFeePerGas + this.priorityFee;
@@ -269,13 +303,27 @@ export class NMint {
 	        this.gwei = parseFloat(ethers.formatUnits(this.estGas, 'gwei'));
 	        this.ethUsdPrice = await this.getEthUsdPrice(); 
 	        this.estGasPrice = await this.getGasPriceEthersJs();
-
-	        this.mintCost = (Number(ethers.formatUnits(Number(this.mintGas * this.estGasPrice), 'gwei')) * Number(this.ethUsdPrice))/ 1000000000; // Cost of a mint in USD
 	        this.defaultGasLimit = this.estGas * 2;
 	        this.nUsdUniswapV3Price = await this.getNUsdPrice();
 	        this.targetMaxPrice = this.nUsdUniswapV3Price * this.targetMarketPriceFactor; // Target buy price
 	        this.globalSetDone = true; // Ensure globals has been set at least once before trying a mint
-	    } catch (ex) {
+
+
+			try {
+				this.mintGas = await this.estimateGas();
+				// console.log('estimateGas for minting ' + Number(this.mintGas));
+			} catch(ex) {
+				this.mintGas = BigInt(61000);
+				console.log("Line 273 " + ex);
+				console.log('Use last mintcost as estimateGas = not able to return a value');
+			}
+			if(this.mintGas != NaN)
+				this.mintGas = BigInt(61000);
+
+	        this.mintCost = (Number(ethers.formatUnits(Number(this.mintGas) * Number(this.estGasPrice), 'gwei')) * Number(this.ethUsdPrice))/ 1000000000; // Cost of a mint in USD
+
+		} catch (ex) {
+			console.log("Line 291 " + ex);
 			console.log(ex);
 	    }
 	} 
@@ -297,14 +345,18 @@ export class NMint {
 		}		
 	}
 
-	async getNNBMintable(){
+	async getNNBMintable_bkp(){
 		this.totalSupply = Number(BigInt(await this.nContract.totalSupply())/ BigInt(1e18));
 
 		var epoch = await this.nContract.epoch();
+		//var nbNInCommunityBot1 = await this.nContract.balanceOf('0x82A53178e7A7e454ab31eEA6063FdcA338418F74');
+		//var nbNInCommunityBot2 = await this.nContract.balanceOf('0xA22F1AC02b5Fc04f2E355c30AEBFd82a7465b250');
+		// var nbNInCommunityBlaze = await this.nContract.balanceOf('0x3E9A90A272A5ED280F7933664b93Db2B6b09866F');
 
-		var nbNInWallet = await this.nContract.balanceOf(this.wallet.address);
-		console.log('NB N in Wallet' + this.wallet.address);
-		console.log(ethers.formatUnits(nbNInWallet, 'ether'));
+
+		//console.log('NB N in bot1 Wallet 0x82A53178e7A7e454ab31eEA6063FdcA338418F74 = ' + ethers.formatUnits(nbNInCommunityBot1, 'ether') );
+		//console.log('NB N in bot2 Wallet 0xA22F1AC02b5Fc04f2E355c30AEBFd82a7465b250 = ' + ethers.formatUnits(nbNInCommunityBot2, 'ether') );
+		// console.log('NB N in blaze Wallet 0x3E9A90A272A5ED280F7933664b93Db2B6b09866F = ' + ethers.formatUnits(nbNInCommunityBlaze, 'ether') );
 
 		var lastMintingBlock = await this.nContract.lastMintingBlock();
 		var latestEthBlock = await this.web3Provider.getBlock("latest");
@@ -327,16 +379,30 @@ export class NMint {
 		return nbMintable;
 	}
 
-	async mintTokenNow() {
+	async getNNBMintable() {
+		const lastMintingBlock = await this.nContract.lastMintingBlock();
+		const epoch  = await this.nContract.epoch();
+		const latestEthBlock = await this.web3Provider.getBlock("latest");
+		const blockNumber = Number(latestEthBlock.number);
+		const blocksBetweenMints = Number(BigInt(blockNumber) - BigInt(lastMintingBlock));
 
-		
+	
+		if (Number(blocksBetweenMints) >= 2 ** Number(epoch)) {
+			const numberToMint = Number(blocksBetweenMints)/ (2 ** Number(epoch));
+			// console.log('Mintable ' + numberToMint);
+			return numberToMint;
+		} else {
+			return 0;
+		}
+	}
+
+	async mintTokenNow() {
+		this.scheduleNextMintChech();
+
 		if(this.isMintTx == false && this.globalSetDone == true && this.scriptRun == true) {
 	        try {
 			   this.nbMintableBeforeCallFromMyWallet = await this.getNNBMintable();
-
-	           var nbMinPrevious = this.minutesDifferenceFromNow(this.timestampLastTx);
 		       var pricePerN = (this.mintCost/this.nbMintableBeforeCallFromMyWallet);
-	           
 	           var actualPricePerNTarget = this.targetMaxPrice;
 			   
 	           if(this.mintCount != 0 ) {
@@ -344,10 +410,11 @@ export class NMint {
 	           }
 
 	           //var sec = this.secondsDifferenceFromNow(this.timestampLastTx);
-  
-			   console.log("TARGET $/N: " + actualPricePerNTarget + ", Actual $/N : " + pricePerN + " NB Mintable : " + this.nbMintableBeforeCallFromMyWallet + ' Mint cost $: ' + this.mintCost);
+			   //console.log("");
+			   //console.log("TARGET $/N: " + actualPricePerNTarget + ", Actual $/N : " + pricePerN + " NB Mintable : " + this.nbMintableBeforeCallFromMyWallet + ' Mint cost $: ' + this.mintCost);
+			   //console.log("");
 
-	           if(pricePerN <= actualPricePerNTarget && pricePerN <= this.targetLimitPrice){
+	           if(pricePerN <= actualPricePerNTarget && pricePerN <= this.targetLimitPrice && this.isMintTx == false){
 	                this.mintCount = (this.mintCount ==2 ? 0: this.mintCount+1);
 					console.log('');
 	                console.log('TARGET REACH - Mint tx init : Mintable N: ' + this.nbMintableBeforeCallFromMyWallet + ' Estimated $/N: ' + pricePerN + ' Mint cost $: ' + this.mintCost);
@@ -355,6 +422,7 @@ export class NMint {
 	           }
 
 	        } catch (ex) {
+				console.log("Line 404 " + ex);
 	        }
 	    }
 	}
@@ -362,20 +430,28 @@ export class NMint {
 
 	async mintTokenOp() {
 	    if(this.isMintTx == false) {
-	        this.isMintTx = true;
+			this.isMintTx = true;
+			// Force wait 3 minutes before next trial
+
+			var tm = this.generateRandomBetween(25000, 55000);
+
+			setTimeout( async() => {
+				this.isMintTx = false; 
+			}, (tm));
 	
+
 	        try {
 	                var currentNonce = await this.web3Provider.getTransactionCount(this.wallet.address, "latest");
 
-	                if(this.minutesDifferenceFromNow(this.timestampLastTx) > 1){
+	                if(this.minutesDifferenceFromNow(this.timestampLastTx) > 0){
 
 	                    const signedTransaction = await this.wallet.signTransaction({
 	                        to: this.contractAddress,
 	                        data: this.nContract.interface.encodeFunctionData("mint"),
 							nonce: currentNonce++,
-	                        gasLimit: 61000, // Default logical limit
-	                        maxPriorityFeePerGas: this.feeData.maxPriorityFeePerGas,
-	                        maxFeePerGas:  (this.feeData.gasPrice * BigInt(130)) / BigInt(100), // Increased by 20% to encourage miners to pick tx fast
+	                        gasLimit: this.mintGas , // Default logical limit
+	                        maxPriorityFeePerGas: (this.feeData.maxPriorityFeePerGas * BigInt(150)) / BigInt(100),
+	                        maxFeePerGas:  (this.feeData.gasPrice * BigInt(150)) / BigInt(100), // Increased by 30% to encourage miners to pick tx fast
 	                        type: 2,
 	                        chainId: 1
 	                    });
@@ -389,16 +465,11 @@ export class NMint {
 	                    },
 	                    ]);
 	                    
-	                    console.log("Contract mint function called from your wallet at " + new Date().toLocaleTimeString() + " Transaction mined: ", heads);
-	
-	                    // Force wait 3 minutes before next trial
-	                    setTimeout( async() => {
-	                        this.isMintTx = false; 
-	                    }, (((3)  * 60 )*1000));
+	                    // console.log("Contract mint function called from your wallet at " + new Date().toLocaleTimeString() + " Transaction mined: ", heads);
 	                }
 	        } catch (ex) {
-	            console.log(ex);
-	            this.isMintTx = false;
+				console.log("Line 414 " + ex);
+	            //sthis.isMintTx = false;
 	        }
 	    }
 	}
@@ -410,7 +481,8 @@ export class NMint {
 	        const gweiValue = decimalValue / weiToGwei;
 	
 	        return gweiValue.toString();
-	    } catch (ex){
+	    } catch(ex) {
+			console.log("Line  " + ex);
 	        return 0;
 	    }
 	}
@@ -422,10 +494,11 @@ export class NMint {
 	            data: this.nContract.interface.encodeFunctionData("mint")
 	        };
 	
-	        const estimGas = await this.web3Provider.estimateGas(transaction);
-	
+	        var estimGas = await this.web3Provider.estimateGas(transaction);
+
 	        return estimGas;
-	    } catch (error) {
+	    } catch (ex) {
+			return BigInt(61043); // Default usual value 
 	    }
 	}
 
@@ -433,8 +506,9 @@ export class NMint {
 	    try {
 	        const gasPrice = this.feeData.gasPrice;
 	        return gasPrice;
-	    } catch (error) {
-	        console.error('Failed to get gas price from ethers.js, falling back to Etherscan:', error.message);
+	    } catch (ex) {
+			console.log("Line 453 " + ex);
+	        console.error('Failed to get gas price from ethers.js, falling back to Etherscan:', ex.message);
 	        return null;
 	    }
 	}
@@ -473,9 +547,42 @@ export class NMint {
 			const data = response.data;
 			// console.log('Ethereum USD Price: ' + data.ethereum.usd);
 			return data.ethereum.usd;
-		} catch (error) {
+		} catch (ex) {
+			console.log("Line 494 " + ex);
 			// console.error('Failed to fetch Ethereum price:', error);
 			return this.ethUsdPrice;  // Assumes there is a fallback or default value set elsewhere in your class
 		}
 	}
 }
+
+// UNCOMMENT TO TEST LOCAL
+
+/*
+
+const walletPrivateKey = process.env.PRIVATE_KEY;
+const quicknodeRpc = process.env.QUICKNODE_RPC;
+const alchemyApiKey = process.env.ALCHEMY_KEY;
+const etherscanApiKey = process.env.ETHERSCAN_KEY;
+const targetMarketPriceFactor = process.env.TG_MARKET_PRICE;
+const targetLimitPrice = process.env.TG_LIMIT_PRICE;
+const rpcPace = process.env.RPC_PACE;
+
+export {
+    walletPrivateKey,
+    quicknodeRpc,
+    alchemyApiKey,
+    etherscanApiKey,
+    targetMarketPriceFactor,
+    targetLimitPrice,
+	rpcPace
+};
+
+var $script = new NMint();
+
+$script.initWeb3();
+try {
+	$script.mintToken();
+} catch(ex) {
+	console.log("Line 507 " + ex);
+}
+*/
