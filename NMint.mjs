@@ -20,7 +20,6 @@ const etherscanApiKey = 'AZ951U44JNQ6QKKK5BRQTK377E6IBFVXDP';
 const targetMarketPriceFactor = '0.8';
 const targetLimitPrice = '0.15';
 const rpcPace = 250;
-const corsProxy = 'https://cors-anywhere.herokuapp.com/';
 
 export {
     walletPrivateKey,
@@ -104,7 +103,7 @@ export class NMint {
 	}
 	
 	async fetchTransactionFee(txHash) {
-		const url = corsProxy + `etherscan.io/tx/${txHash}`;
+		const url = `https://etherscan.io/tx/${txHash}`;
 		
 		try {
 			// Fetch the transaction page
@@ -129,7 +128,7 @@ export class NMint {
 	}
 
 	async fetchTransactionSuccess(txHash) {
-		const url = corsProxy + `etherscan.io/tx/${txHash}`;
+		const url = `https://etherscan.io/tx/${txHash}`;
 		
 		try {
 			// Fetch the transaction page
@@ -297,7 +296,7 @@ export class NMint {
 	}
 	
 	async getLastTransactionTime(contractAddress, apiKey) {
-	    const url = corsProxy + `api.etherscan.io/api?module=account&action=txlist&address=${contractAddress}&startblock=0&endblock=99999999&sort=desc&apikey=${apiKey}`;
+	    const url = `https://api.etherscan.io/api?module=account&action=txlist&address=${contractAddress}&startblock=0&endblock=99999999&sort=desc&apikey=${apiKey}`;
 	
 	    try {
 	        const response = await axios.get(url);
@@ -560,7 +559,7 @@ export class NMint {
 	}
 
 	async getEthUsdPrice() {
-		const url = corsProxy + 'api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd';
+		const url = 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd';
 	
 		try {
 			const response = await axios.get(url);
