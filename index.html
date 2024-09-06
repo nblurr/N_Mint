@@ -150,12 +150,6 @@
 		import { NMint } from 'https://nblurr.github.io/N_Mint/dist/NMint.bundle.mjs';
         
 		const n = new NMint();
-		
-        n.use(function(req, res, next) {
-            res.header('Access-Control-Allow-Origin', '*');
-            res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept');
-            next();
-            });
 
         document.getElementById('run').addEventListener('click', () => {
             try {
