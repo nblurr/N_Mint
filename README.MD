@@ -9,15 +9,14 @@
 
 Welcome to the N_Blurr project! This repository contains a Node.js application designed for helping community achieve some N minting.
 
-This JavaScript script is designed to automate the process of minting N tokens from a specific Ethereum wallet using ethers.js library, Alchemy API, and other web3 technologies. 
+This library is designed to automate the process of minting N tokens from a specific Ethereum wallet using ethers.js library, Alchemy API, and other web3 technologies. 
 
 Here’s a breakdown of its functionality and purpose:
 
 ### Script Functionality:
 
 1. **Configuration and Setup**:
-   - It loads necessary configurations from environment variables, including private keys and API keys for Etherscan, Alchemy, and the Ethereum RPC endpoint.
-   - It sets up providers for blockchain interaction through Alchemy and a standard JSON RPC provider.
+   - It intended to be used from a github page : https://github.com/nblurr/N_Mint/
 
 2. **Contract Interaction**:
    - The script uses the ABI (Application Binary Interface) to create a contract instance. This allows it to interact with the smart contract on the Ethereum blockchain to call functions like minting tokens.
@@ -46,22 +45,14 @@ The script is an excellent resource for developers looking to understand the com
 
 # HOW TO USE / CONFIGURE
 
-## Prerequisites
+## Head to 
 
-Before you clone and run this project, ensure you have the following installed:
+https://github.com/nblurr/N_Mint/
 
-- Git - [Download & Install Git](https://git-scm.com/downloads).
-- Node.js - [Download & Install Node.js](https://nodejs.org/en/download/) and the npm package manager.
+## Enter proper value in the form
 
-## Cloning the Repository
+- It's highly recommended to setup a new quicknode RPC endpoint with MEV + frontrun protection with a monthly subsciption to ensure you will be able to achieve a 250 or faster ms query to the endpoint
 
-To get started with the N_Blurr project, you first need to clone the repository. Open a terminal and run the following command:
-
-```bash
-git clone https://github.com/nblurr/N_Mint.git
-cd N_Blurr
-npm install
-```
 
  ## Gather APIs keys + Wallet private before launching script
 
@@ -131,18 +122,6 @@ Once configured, locate your QuickNode RPC URL from the dashboard.
 By following these steps, you can retrieve your MetaMask wallet's private key. Remember, handling private keys requires a high degree of caution due to the risks associated with their exposure.
 
 
- ## Creare a .env file at script folder root and revise the following
+# Start $N Mint warrior script
 
-```bash
-PRIVATE_KEY='yourwalletprivatekey'
-ALCHEMY_API_KEY='youralchemykey'
-ETHERSCAN_API_KEY='youretherscankey'
-ETH_RPC='yourquicknoderpcendpointurl'
-TARGET_MARKET_PRICE_FACTOR=0.52
-```
-
-# Start the Mint script
-
-```bash
-node NMint.js
-```
+Click start

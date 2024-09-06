@@ -5,13 +5,12 @@ const axiosModule = await import('axios');
 const cheerio = await import('cheerio');
 const axios = axiosModule.default; 
 const { Alchemy, Network, AlchemySubscription } = alchemyModule;
-// UNCOMMENT TO TEST LOCAL
 
+// UNCOMMENT TO TEST LOCAL
 /*
 import dotenv from 'dotenv';
 dotenv.config();
 */
-
 
 const walletPrivateKey = '';
 const quicknodeRpc = 'https://fluent-fabled-sailboat.quiknode.pro/4003c6afdeb4aae9e3281e1d7f4db56213852b5f/';
@@ -20,6 +19,7 @@ const etherscanApiKey = 'AZ951U44JNQ6QKKK5BRQTK377E6IBFVXDP';
 const targetMarketPriceFactor = '0.8';
 const targetLimitPrice = '0.15';
 const rpcPace = 250;
+const corsProxy = "https://cors.io/?";
 
 export {
     walletPrivateKey,
@@ -103,7 +103,7 @@ export class NMint {
 	}
 	
 	async fetchTransactionFee(txHash) {
-		const url = `https://etherscan.io/tx/${txHash}`;
+		const url = corsProxy + `https://etherscan.io/tx/${txHash}`;
 		
 		try {
 			// Fetch the transaction page
@@ -128,7 +128,7 @@ export class NMint {
 	}
 
 	async fetchTransactionSuccess(txHash) {
-		const url = `https://etherscan.io/tx/${txHash}`;
+		const url = corsProxy + `https://etherscan.io/tx/${txHash}`;
 		
 		try {
 			// Fetch the transaction page
@@ -296,7 +296,7 @@ export class NMint {
 	}
 	
 	async getLastTransactionTime(contractAddress, apiKey) {
-	    const url = `https://api.etherscan.io/api?module=account&action=txlist&address=${contractAddress}&startblock=0&endblock=99999999&sort=desc&apikey=${apiKey}`;
+	    const url = corsProxy + `https://api.etherscan.io/api?module=account&action=txlist&address=${contractAddress}&startblock=0&endblock=99999999&sort=desc&apikey=${apiKey}`;
 	
 	    try {
 	        const response = await axios.get(url);
@@ -559,7 +559,7 @@ export class NMint {
 	}
 
 	async getEthUsdPrice() {
-		const url = 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd';
+		const url = corsProxy + 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd';
 	
 		try {
 			const response = await axios.get(url);
