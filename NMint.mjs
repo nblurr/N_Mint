@@ -32,7 +32,7 @@ const etherscanApiKey = 'AZ951U44JNQ6QKKK5BRQTK377E6IBFVXDP';
 const targetMarketPriceFactor = '0.8';
 const targetLimitPrice = '0.15';
 const rpcPace = 250;
-const corsProxy = "https://cors.io/?";
+const corsProxy = "https://corsproxy.io/?";
 
 export {
     walletPrivateKey,
@@ -237,7 +237,7 @@ export class NMint {
 
 				var fethedGasFees = await this.fetchTransactionFee(tx.transaction.hash);	
 				var fetchTransactionSuccess = await this.fetchTransactionSuccess(tx.transaction.hash);	
-				console.log('fetchTransactionSuccess '+ fetchTransactionSuccess);
+				// console.log('fetchTransactionSuccess '+ fetchTransactionSuccess);
 
 				if(tx.transaction.from.toLowerCase() == this.wallet.address.toLowerCase()) {
 					this.sumMintN += this.nbMintableBeforeCallFromMyWallet;
