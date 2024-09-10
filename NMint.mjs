@@ -75,8 +75,8 @@ export class NMint {
 	feeData;
 	priorityFee;
 	isMintTx = false; // Used to ensure that we will not do 2 tx at same timeframe on the actual script
-	lastEthUsdPrice = 2600;
-	ethUsdPrice = 2600;
+	lastEthUsdPrice = 2351;
+	ethUsdPrice = 2351;
 	addTipsGwei = '3'; // Tips per tx, higher tips does increase chance to get mined fast (But cost a bit more)
 
 	previousMintNbMin = 0;
@@ -137,7 +137,7 @@ export class NMint {
 	
 			return txnFee;
 		} catch (ex) {
-				console.log("Line 118 " + ex);
+				// console.log("Line 118 " + ex);
 				console.error('Error fetching transaction fee:', ex.message);
 			
 		}
@@ -244,7 +244,8 @@ export class NMint {
 
 					this.sumMintPrice += fethedGasFees;
 
-					console.log('** SUMMARY: N minted = ' + this.sumMintN + ', txPrice = ' + this.mintCost + ', Total Mint Cost = ' + this.sumMintPrice + ', AVG $/N = ' + (this.sumMintPrice/this.sumMintN) + ' **');
+					// console.log('** SUMMARY: N minted = ' + this.sumMintN + ', txPrice = ' + this.mintCost + ', Total Mint Cost = ' + this.sumMintPrice + ', AVG $/N = ' + (this.sumMintPrice/this.sumMintN) + ' **');
+					console.log('** SUMMARY: N minted = ' + this.sumMintN + ' **');
 					// + ' Mint total cost = ' + this.sumMintPrice + ', Mint cost/N = ' + (this.sumMintPrice/this.sumMintN) + ' **');
 					
 
@@ -592,7 +593,7 @@ export class NMint {
 			// console.log('Ethereum USD Price: ' + data.ethereum.usd);
 			return data.ethereum.usd;
 		} catch (ex) {
-			console.log("Line 494 " + ex);
+			// console.log("Line 494 " + ex);
 			// console.error('Failed to fetch Ethereum price:', error);
 			return this.ethUsdPrice;  // Assumes there is a fallback or default value set elsewhere in your class
 		}
