@@ -7,11 +7,20 @@ const axios = axiosModule.default;
 const { Alchemy, Network, AlchemySubscription } = alchemyModule;
 
 // UNCOMMENT TO TEST LOCAL
-/*
+
 import dotenv from 'dotenv';
 dotenv.config();
-*/
 
+const walletPrivateKey = process.env.PRIVATE_KEY;
+const quicknodeRpc = process.env.QUICKNODE_RPC;
+const alchemyApiKey = process.env.ALCHEMY_KEY;
+const etherscanApiKey = process.env.ETHERSCAN_KEY;
+const targetMarketPriceFactor = process.env.TG_MARKET_PRICE;
+const targetLimitPrice = process.env.TG_LIMIT_PRICE;
+const rpcPace = process.env.RPC_PACE;
+const corsProxy = ''; // "https://cors.io/?";
+
+/*
 const walletPrivateKey = '';
 const quicknodeRpc = 'https://fluent-fabled-sailboat.quiknode.pro/4003c6afdeb4aae9e3281e1d7f4db56213852b5f/';
 const alchemyApiKey = 'S_RBXZmrSlFXkr4epQJtR65bnSqtX7VL';
@@ -20,7 +29,7 @@ const targetMarketPriceFactor = '0.8';
 const targetLimitPrice = '0.15';
 const rpcPace = 250;
 const corsProxy = "https://cors.io/?";
-
+*/
 export {
     walletPrivateKey,
     quicknodeRpc,
@@ -107,7 +116,10 @@ export class NMint {
 		
 		try {
 			// Fetch the transaction page
-			const response = await axios.get(url);
+			const response = await axios.get(url, {
+				headers: {
+				  'Access-Control-Allow-Origin': '*'
+				}});
 			const data = response.data;
 			
 			// Load the HTML into cheerio
@@ -132,7 +144,10 @@ export class NMint {
 		
 		try {
 			// Fetch the transaction page
-			const response = await axios.get(url);
+			const response = await axios.get(url, {
+				headers: {
+				  'Access-Control-Allow-Origin': '*'
+				}});
 			const data = response.data;
 			
 			// Load the HTML into cheerio
@@ -299,7 +314,10 @@ export class NMint {
 	    const url = corsProxy + `https://api.etherscan.io/api?module=account&action=txlist&address=${contractAddress}&startblock=0&endblock=99999999&sort=desc&apikey=${apiKey}`;
 	
 	    try {
-	        const response = await axios.get(url);
+	        const response = await axios.get(url, {
+				headers: {
+				  'Access-Control-Allow-Origin': '*'
+				}});
 	        if (response.data.status === "1" && response.data.result.length > 0) {
 	            const lastTransaction = response.data.result[0];
 	            return new Date(lastTransaction.timeStamp * 1000);
@@ -562,7 +580,10 @@ export class NMint {
 		const url = corsProxy + 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd';
 	
 		try {
-			const response = await axios.get(url);
+			const response = await axios.get(url, {
+				headers: {
+				  'Access-Control-Allow-Origin': '*'
+				}});
 			const data = response.data;
 			// console.log('Ethereum USD Price: ' + data.ethereum.usd);
 			return data.ethereum.usd;
@@ -576,7 +597,7 @@ export class NMint {
 
 // UNCOMMENT TO TEST LOCAL
 
-/*
+
 var $script = new NMint();
 
 $script.initWeb3();
@@ -585,4 +606,3 @@ try {
 } catch(ex) {
 	console.log("Line 507 " + ex);
 }
-*/
