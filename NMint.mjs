@@ -8,6 +8,7 @@ const { Alchemy, Network, AlchemySubscription } = alchemyModule;
 
 // UNCOMMENT TO TEST LOCAL
 
+/*
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -19,8 +20,11 @@ const targetMarketPriceFactor = process.env.TG_MARKET_PRICE;
 const targetLimitPrice = process.env.TG_LIMIT_PRICE;
 const rpcPace = process.env.RPC_PACE;
 const corsProxy = ''; // "https://cors.io/?";
+*/
 
-/*
+// UNCOMMENT TO DEPLOY GITHUB
+
+
 const walletPrivateKey = '';
 const quicknodeRpc = 'https://fluent-fabled-sailboat.quiknode.pro/4003c6afdeb4aae9e3281e1d7f4db56213852b5f/';
 const alchemyApiKey = 'S_RBXZmrSlFXkr4epQJtR65bnSqtX7VL';
@@ -29,7 +33,7 @@ const targetMarketPriceFactor = '0.8';
 const targetLimitPrice = '0.15';
 const rpcPace = 250;
 const corsProxy = "https://cors.io/?";
-*/
+
 export {
     walletPrivateKey,
     quicknodeRpc,
@@ -154,8 +158,8 @@ export class NMint {
 			const $ = cheerio.load(data);
 
 			const txSuccess = $("~:contains('Success')").first()
-			console.log('Success ');
-			console.log(txSuccess.text());
+			// console.log('Success ');
+			// console.log(txSuccess.text());
 			
 			if(txSuccess)
 				return true;
@@ -163,8 +167,8 @@ export class NMint {
 				return false;
 	
 		} catch (ex) {
-				console.log("Line 118 " + ex);
-				console.error('Error fetching tx success:', ex.message);
+				// console.log("Line 118 " + ex);
+				// console.error('Error fetching tx success:', ex.message);
 			
 		}
 	}	
@@ -505,7 +509,7 @@ export class NMint {
 	                    // console.log("Contract mint function called from your wallet at " + new Date().toLocaleTimeString() + " Transaction mined: ", heads);
 	                }
 	        } catch (ex) {
-				console.log("Line 414 " + ex);
+				// console.log("Line 414 " + ex);
 	            //sthis.isMintTx = false;
 	        }
 	    }
@@ -597,7 +601,7 @@ export class NMint {
 
 // UNCOMMENT TO TEST LOCAL
 
-
+/*
 var $script = new NMint();
 
 $script.initWeb3();
@@ -606,3 +610,4 @@ try {
 } catch(ex) {
 	console.log("Line 507 " + ex);
 }
+*/
