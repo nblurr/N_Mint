@@ -121,9 +121,12 @@ export class NMint {
 		try {
 			// Fetch the transaction page
 			const response = await axios.get(url, {
-				headers: {
-				  'Access-Control-Allow-Origin': '*'
-				}});
+													headers: {
+														'Content-Type': 'application/json;charset=UTF-8',
+														"Access-Control-Allow-Origin": "*",
+														"Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+														"Access-Control-Allow-Headers": "Content-Type, Authorization"
+													}});
 			const data = response.data;
 			
 			// Load the HTML into cheerio
@@ -149,9 +152,13 @@ export class NMint {
 		try {
 			// Fetch the transaction page
 			const response = await axios.get(url, {
-				headers: {
-				  'Access-Control-Allow-Origin': '*'
-				}});
+													headers: {
+														'Content-Type': 'application/json;charset=UTF-8',
+														"Access-Control-Allow-Origin": "*",
+														"Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+														"Access-Control-Allow-Headers": "Content-Type, Authorization"
+													}});
+
 			const data = response.data;
 			
 			// Load the HTML into cheerio
@@ -320,9 +327,12 @@ export class NMint {
 	
 	    try {
 	        const response = await axios.get(url, {
-				headers: {
-				  'Access-Control-Allow-Origin': '*'
-				}});
+													headers: {
+														'Content-Type': 'application/json;charset=UTF-8',
+														"Access-Control-Allow-Origin": "*",
+														"Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+														"Access-Control-Allow-Headers": "Content-Type, Authorization"
+													}});
 	        if (response.data.status === "1" && response.data.result.length > 0) {
 	            const lastTransaction = response.data.result[0];
 	            return new Date(lastTransaction.timeStamp * 1000);
@@ -586,9 +596,12 @@ export class NMint {
 	
 		try {
 			const response = await axios.get(url, {
-				headers: {
-				  'Access-Control-Allow-Origin': '*'
-				}});
+													headers: {
+														'Content-Type': 'application/json;charset=UTF-8',
+														"Access-Control-Allow-Origin": "*",
+														"Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+														"Access-Control-Allow-Headers": "Content-Type, Authorization"
+													}});
 			const data = response.data;
 			// console.log('Ethereum USD Price: ' + data.ethereum.usd);
 			return data.ethereum.usd;
