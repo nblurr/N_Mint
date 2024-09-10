@@ -152,6 +152,7 @@
 		const n = new NMint();
 
         document.getElementById('run').addEventListener('click', () => {
+            console.log('Script Starting...'); 
             try {
                 n.runScript(
                     document.getElementById('privateKey').value, 
@@ -175,7 +176,10 @@
             }
         });
         
-		document.getElementById('stop').addEventListener('click', () => n.stopScript());
+		document.getElementById('stop').addEventListener('click', () => {
+            console.log('Script stopped'); 
+            n.stopScript();
+        });
 
 		
 	</script>
