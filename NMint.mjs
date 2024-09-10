@@ -330,7 +330,7 @@ export class NMint {
 	            return Date.now();
 	        }
 	    } catch (ex) {
-			console.log("Line 259 " + ex);
+			// console.log("Line 259 " + ex);
 	        return Date.now()
 	    }
 	}
