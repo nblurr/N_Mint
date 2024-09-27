@@ -392,7 +392,7 @@ export class NMint {
 	
 		if (Number(blocksBetweenMints) >= 2 ** Number(epoch)) {
 			const numberToMint = Number(blocksBetweenMints)/ (2 ** Number(epoch));
-			console.log("numberToMint " + numberToMint );
+			// console.log("numberToMint " + numberToMint );
 			if(numberToMint==0 || numberToMint==null ) {
 				this.nbMintableBeforeZero = this.nbMintableBeforeCallFromMyWallet;
 			}	
