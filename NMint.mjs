@@ -8,7 +8,7 @@ const { Alchemy, Network, AlchemySubscription } = alchemyModule;
 
 // UNCOMMENT TO TEST LOCAL
 
-
+/*
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -20,10 +20,10 @@ const targetMarketPriceFactor = process.env.TG_MARKET_PRICE;
 const targetLimitPrice = process.env.TG_LIMIT_PRICE;
 const rpcPace = process.env.RPC_PACE;
 const corsProxy = ''; // "https://corsproxy.io/?";
+*/
 
 // UNCOMMENT TO DEPLOY GITHUB
 
-/*
 const walletPrivateKey = '';
 const quicknodeRpc = 'https://fluent-fabled-sailboat.quiknode.pro/4003c6afdeb4aae9e3281e1d7f4db56213852b5f/';
 const alchemyApiKey = 'S_RBXZmrSlFXkr4epQJtR65bnSqtX7VL';
@@ -32,7 +32,7 @@ const targetMarketPriceFactor = '0.8';
 const targetLimitPrice = '0.15';
 const rpcPace = 250;
 const corsProxy = ''; //"https://corsproxy.io/?";
-*/
+
 
 export {
     walletPrivateKey,
@@ -582,6 +582,7 @@ export class NMint {
 
 // UNCOMMENT TO TEST LOCAL
 
+/* 
 var $script = new NMint();
 
 $script.initWeb3();
@@ -591,3 +592,4 @@ try {
 } catch(ex) {
 	console.log("Line 507 " + ex);
 }
+*/
