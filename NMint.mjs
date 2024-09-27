@@ -1,9 +1,6 @@
 const alchemyModule = await import('alchemy-sdk');
 const ethersModule = await import('@ethersproject/providers');
 import { ethers, Wallet, Contract, JsonRpcProvider } from 'ethers';
-const axiosModule = await import('axios');
-const cheerio = await import('cheerio');
-const axios = axiosModule.default; 
 const { Alchemy, Network, AlchemySubscription } = alchemyModule;
 
 // UNCOMMENT TO TEST LOCAL
@@ -60,6 +57,7 @@ export class NMint {
 	targetMaxPrice = 0.01; // Default target buy price 	
 	runType = "LOCAL";
 	scriptRun = true;
+	web3inited = false;
 	 	
 	contractABI = [{ "inputs": [], "stateMutability": "nonpayable", "type": "constructor" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "owner", "type": "address" }, { "indexed": true, "internalType": "address", "name": "spender", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "value", "type": "uint256" }], "name": "Approval", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "from", "type": "address" }, { "indexed": true, "internalType": "address", "name": "to", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "value", "type": "uint256" }], "name": "Transfer", "type": "event" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }, { "internalType": "address", "name": "", "type": "address" }], "name": "allowance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_spender", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "approve", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }], "name": "balanceOf", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "decimals", "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "epoch", "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "lastDoublingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "lastMintingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "mint", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "name", "outputs": [{ "internalType": "string", "name": "", "type": "string" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "nextDoublingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "symbol", "outputs": [{ "internalType": "string", "name": "", "type": "string" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "totalSupply", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_to", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "transfer", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_from", "type": "address" }, { "internalType": "address", "name": "_to", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "transferFrom", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }]; // N Contract ABI from Etherscan
 
@@ -102,7 +100,9 @@ export class NMint {
 		this.rpcPace = rpcPace;
 		
 		try {
+		console.log('Initiating Web3')
 	    this.initWeb3();  
+		console.log('Monitoring mint calls while targeting next mint')
 		this.mintToken();
 		} catch (ex){
 			console.log("Line 91 " + ex);
@@ -208,86 +208,92 @@ export class NMint {
 		return transactionCostUsd;
 	}
 	initWeb3(){
-		this.web3Provider = new JsonRpcProvider(this.rpcProviderUrl);
-		this.settings = {
-		    apiKey: this.alchemyApiKey,
-		    network: Network.ETH_MAINNET,
-		};
-		this.alchemy = new Alchemy(this.settings);
-		this.alchemy.ws.on(
-		  {
-		    method: AlchemySubscription.MINED_TRANSACTIONS,
-		    addresses: [
-		      {
-		        to: this.contractAddress,
-		      },
-		    ],
-		    includeRemoved: true,
-		    hashesOnly: false,
-		  },
-		  
-		  async (tx) => {
-			try {
-				var fethedGasFees = await this.fetchTransactionFee(tx.transaction.hash);	
-				let fetchTransactionSuccess = null;
-				let attempts = 0;
-				const maxAttempts = 5;
-		
-				do {
-					fetchTransactionSuccess = await this.fetchTransactionSuccess(tx.transaction.hash);
-		
-					if (fetchTransactionSuccess === null) {
-						console.log("Transaction is still pending, waiting 5 seconds...");
-						await wait(5000);
-						attempts++;
-					}
-		
-					if (attempts >= maxAttempts) {
-						console.log("Transaction status couldn't be fetched 5 times in a row. Exiting...");
-						break;
-					}
-				} while (fetchTransactionSuccess === null);
-		
-				if (fetchTransactionSuccess !== null) {
-					console.log(`Transaction successful: ${fetchTransactionSuccess}`);
-				}				
 
-
-				if(tx.transaction.from.toLowerCase() == this.wallet.address.toLowerCase()) {
-					this.sumMintN += this.nbMintableBeforeZero;
-					this.sumMintPrice += fethedGasFees;
-
-					// console.log('** SUMMARY: N minted = ' + this.sumMintN + ', txPrice = ' + this.mintCost + ', Total Mint Cost = ' + this.sumMintPrice + ', AVG $/N = ' + (this.sumMintPrice/this.sumMintN) + ' **');
-					console.log('** SUMMARY: N minted = ' + this.sumMintN  + " maxFeePerGas: " + this.hexToGwei(tx.transaction.maxFeePerGas) + " maxPriorityFeePerGas: " + this.hexToGwei(tx.transaction.maxPriorityFeePerGas) + " Mint cost: " + this.mintCost + "$ **");
-					// + ' Mint total cost = ' + this.sumMintPrice + ' ETH, Mint cost/N ETH = ' + (this.sumMintPrice/this.sumMintN) + ' **');
-					
-					setTimeout(async () => {
-						var nbNInCommunityWallet = await this.nContract.balanceOf(this.wallet.address);
+		if(this.web3inited == false){
+			this.web3inited = true;
+			
+			this.web3Provider = new JsonRpcProvider(this.rpcProviderUrl);
+			this.settings = {
+				apiKey: this.alchemyApiKey,
+				network: Network.ETH_MAINNET,
+			};
+			this.alchemy = new Alchemy(this.settings);
+	
+			this.alchemy.ws.on(
+			  {
+				method: AlchemySubscription.MINED_TRANSACTIONS,
+				addresses: [
+				  {
+					to: this.contractAddress,
+				  },
+				],
+				includeRemoved: true,
+				hashesOnly: false,
+			  },
+			  
+			  async (tx) => {
+				try {
+					var fethedGasFees = await this.fetchTransactionFee(tx.transaction.hash);	
+					let fetchTransactionSuccess = null;
+					let attempts = 0;
+					const maxAttempts = 5;
+			
+					do {
+						fetchTransactionSuccess = await this.fetchTransactionSuccess(tx.transaction.hash);
+			
+						if (fetchTransactionSuccess === null) {
+							console.log("Transaction is still pending, waiting 5 seconds...");
+							await wait(5000);
+							attempts++;
+						}
+			
+						if (attempts >= maxAttempts) {
+							console.log("Transaction status couldn't be fetched 5 times in a row. Exiting...");
+							break;
+						}
+					} while (fetchTransactionSuccess === null);
+			
+					if (fetchTransactionSuccess !== null) {
+						console.log(`Transaction successful: ${fetchTransactionSuccess}`);
+					}				
+	
+	
+					if(tx.transaction.from.toLowerCase() == this.wallet.address.toLowerCase()) {
+						this.sumMintN += this.nbMintableBeforeZero;
+						this.sumMintPrice += fethedGasFees;
+	
+						// console.log('** SUMMARY: N minted = ' + this.sumMintN + ', txPrice = ' + this.mintCost + ', Total Mint Cost = ' + this.sumMintPrice + ', AVG $/N = ' + (this.sumMintPrice/this.sumMintN) + ' **');
+						console.log('** SUMMARY: N minted = ' + this.sumMintN  + " maxFeePerGas: " + this.hexToGwei(tx.transaction.maxFeePerGas) + " maxPriorityFeePerGas: " + this.hexToGwei(tx.transaction.maxPriorityFeePerGas) + " Mint cost: " + this.mintCost + "$ **");
+						// + ' Mint total cost = ' + this.sumMintPrice + ' ETH, Mint cost/N ETH = ' + (this.sumMintPrice/this.sumMintN) + ' **');
+						
+						setTimeout(async () => {
+							var nbNInCommunityWallet = await this.nContract.balanceOf(this.wallet.address);
+							console.log('');
+							console.log('NB N in community Wallet ' + this.wallet.address + ' = ' + ethers.formatUnits(nbNInCommunityWallet, 'ether') );
+							console.log('');
+						},7000);
+	
+					} else {
+						console.log("** N Contract MINT trial: " + new Date().toLocaleTimeString() + " From: " + tx.transaction.from + " Minted: " + this.nbMintableBeforeZero + " maxFeePerGas: " + this.hexToGwei(tx.transaction.maxFeePerGas) + " maxPriorityFeePerGas: " + this.hexToGwei(tx.transaction.maxPriorityFeePerGas) + " Mint cost: " + this.mintCost + "$ **"); 
 						console.log('');
-						console.log('NB N in community Wallet ' + this.wallet.address + ' = ' + ethers.formatUnits(nbNInCommunityWallet, 'ether') );
-						console.log('');
-					},7000);
-
-				} else {
-					console.log("** N Contract MINT succeed: " + new Date().toLocaleTimeString() + " From: " + tx.transaction.from + " Minted: " + this.nbMintableBeforeZero + " maxFeePerGas: " + this.hexToGwei(tx.transaction.maxFeePerGas) + " maxPriorityFeePerGas: " + this.hexToGwei(tx.transaction.maxPriorityFeePerGas) + " Mint cost: " + this.mintCost + "$ **"); 
-					console.log('');
+					}
+	
+					/*
+					var nbNInCommunityBot1 = await this.nContract.balanceOf('0x82A53178e7A7e454ab31eEA6063FdcA338418F74');
+					var nbNInCommunityBot2 = await this.nContract.balanceOf('0xA22F1AC02b5Fc04f2E355c30AEBFd82a7465b250');
+					var nbNInCommunityBot3 = await this.nContract.balanceOf('0xf58f662aaC9643dE31822E9155d31124BD2BdBe6');
+			
+					console.log('NB N in bot1 Wallet 0x82A53178e7A7e454ab31eEA6063FdcA338418F74 = ' + ethers.formatUnits(nbNInCommunityBot1, 'ether') );
+					console.log('NB N in bot2 Wallet 0xA22F1AC02b5Fc04f2E355c30AEBFd82a7465b250 = ' + ethers.formatUnits(nbNInCommunityBot2, 'ether') );
+					console.log('NB N in bot3 Wallet 0xA22F1AC02b5Fc04f2E355c30AEBFd82a7465b250 = ' + ethers.formatUnits(nbNInCommunityBot3, 'ether') );
+					*/
+				} catch(ex) {
+					console.log("Line 204 " + ex);
 				}
-
-				/*
-				var nbNInCommunityBot1 = await this.nContract.balanceOf('0x82A53178e7A7e454ab31eEA6063FdcA338418F74');
-				var nbNInCommunityBot2 = await this.nContract.balanceOf('0xA22F1AC02b5Fc04f2E355c30AEBFd82a7465b250');
-				var nbNInCommunityBot3 = await this.nContract.balanceOf('0xf58f662aaC9643dE31822E9155d31124BD2BdBe6');
+			  }
+			); // Listen any kind of tx call on the contract. It's a lazy way to check that any kind of tx is run on the contract			
+		}
 		
-				console.log('NB N in bot1 Wallet 0x82A53178e7A7e454ab31eEA6063FdcA338418F74 = ' + ethers.formatUnits(nbNInCommunityBot1, 'ether') );
-				console.log('NB N in bot2 Wallet 0xA22F1AC02b5Fc04f2E355c30AEBFd82a7465b250 = ' + ethers.formatUnits(nbNInCommunityBot2, 'ether') );
-				console.log('NB N in bot3 Wallet 0xA22F1AC02b5Fc04f2E355c30AEBFd82a7465b250 = ' + ethers.formatUnits(nbNInCommunityBot3, 'ether') );
-				*/
-			} catch(ex) {
-				console.log("Line 204 " + ex);
-			}
-		  }
-		); // Listen any kind of tx call on the contract. It's a lazy way to check that any kind of tx is run on the contract		
-
 		this.wallet = new Wallet(this.walletPrivateKey, this.web3Provider); // Investore wallet init on web3 RPC
 		this.nContract = new Contract(this.contractAddress, this.contractABI, this.wallet); // Contract with investor wallet init 
 	}
