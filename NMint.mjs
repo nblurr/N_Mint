@@ -21,6 +21,7 @@ const corsProxy = ''; // "https://corsproxy.io/?";
 
 // UNCOMMENT TO DEPLOY GITHUB
 
+
 const walletPrivateKey = '';
 const quicknodeRpc = 'https://fluent-fabled-sailboat.quiknode.pro/4003c6afdeb4aae9e3281e1d7f4db56213852b5f/';
 const alchemyApiKey = 'S_RBXZmrSlFXkr4epQJtR65bnSqtX7VL';
@@ -86,6 +87,8 @@ export class NMint {
 	sumMintN = 0;
 	sumMintNPrice = 0;
 	nbMintableBeforeZero = 0;
+	lastNbMintableBeforeZeroUpdate = Date.now();
+	lastNPriceTargetShown = Date.now();
 
     constructor() {
 	}
@@ -149,7 +152,7 @@ export class NMint {
 	async fetchTransactionSuccess(txHash) {
 		try {
 			// Fetch the transaction receipt using the transaction hash
-			console.log('txHash' + txHash);
+			console.log('txHash: ' + txHash);
 			const txReceipt = await this.web3Provider.getTransactionReceipt(txHash);
 	
 			// If the transaction is still pending (no receipt), return null
@@ -263,7 +266,7 @@ export class NMint {
 						this.sumMintPrice += fethedGasFees;
 	
 						// console.log('** SUMMARY: N minted = ' + this.sumMintN + ', txPrice = ' + this.mintCost + ', Total Mint Cost = ' + this.sumMintPrice + ', AVG $/N = ' + (this.sumMintPrice/this.sumMintN) + ' **');
-						console.log('** SUMMARY: N minted = ' + this.sumMintN  + " maxFeePerGas: " + this.hexToGwei(tx.transaction.maxFeePerGas) + " maxPriorityFeePerGas: " + this.hexToGwei(tx.transaction.maxPriorityFeePerGas) + " Mint cost: " + this.mintCost + "$ **");
+						console.log('** SUMMARY: N minted = ' + this.sumMintN  + " maxFeePerGas: " + this.hexToGwei(tx.transaction.maxFeePerGas) + " maxPriorityFeePerGas: " + this.hexToGwei(tx.transaction.maxPriorityFeePerGas) + " Estimated mint cost: " + this.mintCost + "$ **");
 						// + ' Mint total cost = ' + this.sumMintPrice + ' ETH, Mint cost/N ETH = ' + (this.sumMintPrice/this.sumMintN) + ' **');
 						
 						setTimeout(async () => {
@@ -365,7 +368,7 @@ export class NMint {
 				this.mintGas = BigInt(61000);
 
 	        this.mintCost = (Number(ethers.formatUnits(Number(this.mintGas) * Number(this.estGasPrice), 'gwei')) * Number(this.ethUsdPrice))/ 1000000000; // Cost of a mint in USD
-
+			console.log('Actual Mint cost ' + this.mintCost);
 		} catch (ex) {
 			console.log("Line 291 " + ex);
 			console.log(ex);
@@ -398,8 +401,11 @@ export class NMint {
 	
 		if (Number(blocksBetweenMints) >= 2 ** Number(epoch)) {
 			const numberToMint = Number(blocksBetweenMints)/ (2 ** Number(epoch));
-			// console.log("numberToMint " + numberToMint );
-			if(numberToMint==0 || numberToMint==null ) {
+
+			// Wait 20 seconds before updating
+			if((numberToMint==0 || numberToMint==null) && (Date.now() - this.lastNbMintableBeforeZeroUpdate) > 20000 ) {
+				this.lastNbMintableBeforeZeroUpdate = Date.now();
+				
 				this.nbMintableBeforeZero = this.nbMintableBeforeCallFromMyWallet;
 			}	
 			
@@ -416,11 +422,17 @@ export class NMint {
 		if(this.isMintTx == false && this.globalSetDone == true && this.scriptRun == true) {
 	        try {
 		       var pricePerN = (this.mintCost/this.nbMintableBeforeCallFromMyWallet);
-	           var actualPricePerNTarget = this.targetMaxPrice;
+	           var actualPricePerNTarget = this.nUsdUniswapV3Price * this.targetMarketPriceFactor;
+
 			   
-	           if(this.mintCount != 0 ) {
-	                actualPricePerNTarget = this.targetMaxPrice + this.generateRandomBetween(-0.02, 0.02);
-	           }
+			// Wait 20 seconds before updating
+			if((Date.now() - this.lastNPriceTargetShown) > 15000 ) {
+				this.lastNPriceTargetShown = Date.now();
+				
+				console.log('TARGET MINT PRICE/N: ' + actualPricePerNTarget + ' ACTUAL MINT PRICE/N: ' + pricePerN);
+			}	
+
+
 
 	           if(pricePerN <= actualPricePerNTarget && pricePerN <= this.targetLimitPrice && this.isMintTx == false){
 	                this.mintCount = (this.mintCount ==2 ? 0: this.mintCount+1);
@@ -462,8 +474,6 @@ export class NMint {
 						chainId: 1
 					});
 
-					console.log('FAKE MINT');
-					/*
 					const heads = await this.web3Provider.send("eth_sendPrivateTransaction", [
 					{
 						"tx": signedTransaction,
@@ -472,7 +482,6 @@ export class NMint {
 						}
 					},
 					]);
-					*/
 
 					// console.log("Contract mint function called from your wallet at " + new Date().toLocaleTimeString() + " Transaction mined: ", heads);
 	        } catch (ex) {
@@ -588,7 +597,7 @@ export class NMint {
 
 // UNCOMMENT TO TEST LOCAL
 
-/* 
+/*
 var $script = new NMint();
 
 $script.initWeb3();
