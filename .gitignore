@@ -1,5 +1,6 @@
 # Logs
 NMint_local.mjsq
+n.pem
 logs
 *.log
 npm-debug.log*

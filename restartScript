@@ -1,0 +1,4 @@
+#!/bin/bash
+pkill node
+nohup node NMint_local.mjs > output.log 2>&1 &
+less +F output.log

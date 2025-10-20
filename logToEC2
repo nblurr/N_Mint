@@ -1,0 +1,2 @@
+#!/bin/bash
+ssh -i ./n.pem ubuntu@52.23.159.76

@@ -1,0 +1,4 @@
+{
+    "python.formatting.provider": "black",  // or "autopep8", or "yapf"
+    "editor.formatOnSave": true
+  }

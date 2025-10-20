@@ -1,483 +1,675 @@
-const alchemyModule = await import('alchemy-sdk');
-const ethersModule = await import('@ethersproject/providers');
-import { ethers, Wallet, Contract, JsonRpcProvider } from 'ethers';
-const axiosModule = await import('axios');
-const axios = axiosModule.default;  // Assuming axios uses default export
-const { Alchemy, Network, AlchemySubscription } = alchemyModule;
+// Optimized NMint Script for Fast Ethereum Minting
+// Version: Performance-First
 
-
-const runType = 'LOCAL';
-
-if (process.env.NODE_ENV === 'production') {
-	runType = 'CLOUD';
-} 
-
-// UNCOMMENT TO TEST LOCAL
 import dotenv from 'dotenv';
 dotenv.config();
 
-const walletPrivateKey = process.env.PRIVATE_KEY;
-const quicknodeRpc = process.env.QUICKNODE_RPC;
-const alchemyApiKey = process.env.ALCHEMY_KEY;
-const etherscanApiKey = process.env.ETHERSCAN_KEY;
-const targetMarketPriceFactor = process.env.TG_MARKET_PRICE;
-const targetLimitPrice = process.env.TG_LIMIT_PRICE;
+import { sortedFlashbotsRpcs } from './flashbotsSpeedMonitor.mjs';
+import { pickWallet } from './mintCoordinator.mjs';
 
-export {
-    walletPrivateKey,
-    quicknodeRpc,
-    alchemyApiKey,
-    etherscanApiKey,
-    targetMarketPriceFactor,
-    targetLimitPrice,
-    runType
-};
+import axios from 'axios';
+import { ethers, Wallet, Contract, JsonRpcProvider, WebSocketProvider, toUtf8Bytes } from 'ethers';
+import { Alchemy, Network, AlchemySubscription } from 'alchemy-sdk';
+import { FlashbotsBundleProvider } from '@flashbots/ethers-provider-bundle';
+import fetch from 'node-fetch';
+import { randomUUID } from 'crypto';
+const sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
-export class NMint {
-	web3Provider;
-	settings;
-	alchemy;
-	wallet; 
-	nContract; 	
-	
-	walletPrivateKey = walletPrivateKey; // An ETH private key is required to proceed to this script
-	rpcProviderUrl = quicknodeRpc; // QUICKNODE RPC Endpoint = recommended: flashbot and MEV bot protect add-ons must be activated
-	alchemyApiKey = alchemyApiKey; // We using two endpoint for webhook and tx to enhance performance and reduce tx listing potential 
-	etherscanAPIKey = etherscanApiKey;
-	targetMarketPriceFactor = targetMarketPriceFactor;
-	targetLimitPrice = targetLimitPrice;
-	targetMaxPrice = 0.01; // Default target buy price 	
-	runType = "LOCAL";
-	scriptRun = true;
-	 	
-	contractABI = [{ "inputs": [], "stateMutability": "nonpayable", "type": "constructor" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "owner", "type": "address" }, { "indexed": true, "internalType": "address", "name": "spender", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "value", "type": "uint256" }], "name": "Approval", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "from", "type": "address" }, { "indexed": true, "internalType": "address", "name": "to", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "value", "type": "uint256" }], "name": "Transfer", "type": "event" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }, { "internalType": "address", "name": "", "type": "address" }], "name": "allowance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_spender", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "approve", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }], "name": "balanceOf", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "decimals", "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "epoch", "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "lastDoublingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "lastMintingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "mint", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "name", "outputs": [{ "internalType": "string", "name": "", "type": "string" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "nextDoublingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "symbol", "outputs": [{ "internalType": "string", "name": "", "type": "string" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "totalSupply", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_to", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "transfer", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_from", "type": "address" }, { "internalType": "address", "name": "_to", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "transferFrom", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }]; // N Contract ABI from Etherscan
+export class NMintFast {
+	constructor() {
+		this.initVars();
+	}
 
-	contractAddress = "0xE73d53e3a982ab2750A0b76F9012e18B256Cc243"; // N contract address.
-	
-	estGas = 0;
-	estGasPrice = 0;
-	gwei = 0;
-	mintCost = 0;
-	estGasPrice = 0;
-	totGas = 0;
-	globalSetDone = false;  // Ensure globals has been set at least once 
-	feeData;
-	priorityFee;
-	isMintTx = false; // Used to ensure that we will not do 2 tx at same timeframe on the actual script
-	lastEthUsdPrice = 2443;
-	ethUsdPrice = 2442;
-	addTipsGwei = '3'; // Tips per tx, higher tips does increase chance to get mined fast (But cost a bit more)
+	initVars() {
+		this.walletMintHistory = {}; // address => BigInt balance
+		this.mintWarriorWallets = JSON.parse(process.env.WARRIOR_WALLETS);
+		this.lastActiveTime = Date.now();
+		this.justMintedBySomeoneElse = false;
+		this.walletPrivateKey = process.env.PRIVATE_KEY;
+		this.wssRpcProviderUrl = process.env.WSS_RPC;
+		this.jsonRpcProviderUrl = process.env.JSON_RPC;
+		this.flashbotsRpcProviderUrl = process.env.FLASHBOTS_RPC;
+		this.alchemyApiKey = process.env.ALCHEMY_KEY;
+		this.etherscanAPIKey = process.env.ETHERSCAN_KEY;
+		this.targetMarketPriceFactor = parseFloat(process.env.TG_MARKET_PRICE);
+		this.targetLimitPrice = parseFloat(process.env.TG_LIMIT_PRICE);
+		this.useFlashbots = process.env.USE_FLASHBOTS?.toLowerCase() === 'true'
+		this.addTipsGwei = parseFloat(process.env.TX_TIPS_GWEI_POURCENT);
+		this.defaultTipsGwei = this.addTipsGwei; // Store base config
+		this.authWalletPkey = process.env.AUTH_WALLET_PKEY;
+		this.FlashbotsMintingInXBlock = parseFloat(process.env.FLASHBOTS_MINTING_IN_X_BLOCK);
+		this.nbInactivityMinutes = 2
+		this.isMintTx = false;
+		this.contractAddress = '0xE73d53e3a982ab2750A0b76F9012e18B256Cc243';
 
-	previousMintNbMin = 0;
-	timestampLastTx = new Date(Date.now() - 1000 * (this.previousMintNbMin * 60));
-	wethAddress = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
+		this.tipsBoost = 1.0; // starts neutral
+		this.lostMintCounter = 0;
+		this.successMintCounter = 0;
+		this.maxTipsBoost = 3.0; // safety cap
+		this.minTipsBoost = 0.5;
+		this.tipsAdjustStep = 0.2;
+		this.resetTipsAfter = 2; // Reset after this many wins
 
-	poolAddress = '0x90e7a93E0a6514CB0c84fC7aCC1cb5c0793352d2';
-	poolABI = [{ "inputs": [], "stateMutability": "nonpayable", "type": "constructor" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "owner", "type": "address" }, { "indexed": true, "internalType": "int24", "name": "tickLower", "type": "int24" }, { "indexed": true, "internalType": "int24", "name": "tickUpper", "type": "int24" }, { "indexed": false, "internalType": "uint128", "name": "amount", "type": "uint128" }, { "indexed": false, "internalType": "uint256", "name": "amount0", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "amount1", "type": "uint256" }], "name": "Burn", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "owner", "type": "address" }, { "indexed": false, "internalType": "address", "name": "recipient", "type": "address" }, { "indexed": true, "internalType": "int24", "name": "tickLower", "type": "int24" }, { "indexed": true, "internalType": "int24", "name": "tickUpper", "type": "int24" }, { "indexed": false, "internalType": "uint128", "name": "amount0", "type": "uint128" }, { "indexed": false, "internalType": "uint128", "name": "amount1", "type": "uint128" }], "name": "Collect", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "sender", "type": "address" }, { "indexed": true, "internalType": "address", "name": "recipient", "type": "address" }, { "indexed": false, "internalType": "uint128", "name": "amount0", "type": "uint128" }, { "indexed": false, "internalType": "uint128", "name": "amount1", "type": "uint128" }], "name": "CollectProtocol", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "sender", "type": "address" }, { "indexed": true, "internalType": "address", "name": "recipient", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "amount0", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "amount1", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "paid0", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "paid1", "type": "uint256" }], "name": "Flash", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": false, "internalType": "uint16", "name": "observationCardinalityNextOld", "type": "uint16" }, { "indexed": false, "internalType": "uint16", "name": "observationCardinalityNextNew", "type": "uint16" }], "name": "IncreaseObservationCardinalityNext", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": false, "internalType": "uint160", "name": "sqrtPriceX96", "type": "uint160" }, { "indexed": false, "internalType": "int24", "name": "tick", "type": "int24" }], "name": "Initialize", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": false, "internalType": "address", "name": "sender", "type": "address" }, { "indexed": true, "internalType": "address", "name": "owner", "type": "address" }, { "indexed": true, "internalType": "int24", "name": "tickLower", "type": "int24" }, { "indexed": true, "internalType": "int24", "name": "tickUpper", "type": "int24" }, { "indexed": false, "internalType": "uint128", "name": "amount", "type": "uint128" }, { "indexed": false, "internalType": "uint256", "name": "amount0", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "amount1", "type": "uint256" }], "name": "Mint", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": false, "internalType": "uint8", "name": "feeProtocol0Old", "type": "uint8" }, { "indexed": false, "internalType": "uint8", "name": "feeProtocol1Old", "type": "uint8" }, { "indexed": false, "internalType": "uint8", "name": "feeProtocol0New", "type": "uint8" }, { "indexed": false, "internalType": "uint8", "name": "feeProtocol1New", "type": "uint8" }], "name": "SetFeeProtocol", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "sender", "type": "address" }, { "indexed": true, "internalType": "address", "name": "recipient", "type": "address" }, { "indexed": false, "internalType": "int256", "name": "amount0", "type": "int256" }, { "indexed": false, "internalType": "int256", "name": "amount1", "type": "int256" }, { "indexed": false, "internalType": "uint160", "name": "sqrtPriceX96", "type": "uint160" }, { "indexed": false, "internalType": "uint128", "name": "liquidity", "type": "uint128" }, { "indexed": false, "internalType": "int24", "name": "tick", "type": "int24" }], "name": "Swap", "type": "event" }, { "inputs": [{ "internalType": "int24", "name": "tickLower", "type": "int24" }, { "internalType": "int24", "name": "tickUpper", "type": "int24" }, { "internalType": "uint128", "name": "amount", "type": "uint128" }], "name": "burn", "outputs": [{ "internalType": "uint256", "name": "amount0", "type": "uint256" }, { "internalType": "uint256", "name": "amount1", "type": "uint256" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "recipient", "type": "address" }, { "internalType": "int24", "name": "tickLower", "type": "int24" }, { "internalType": "int24", "name": "tickUpper", "type": "int24" }, { "internalType": "uint128", "name": "amount0Requested", "type": "uint128" }, { "internalType": "uint128", "name": "amount1Requested", "type": "uint128" }], "name": "collect", "outputs": [{ "internalType": "uint128", "name": "amount0", "type": "uint128" }, { "internalType": "uint128", "name": "amount1", "type": "uint128" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "recipient", "type": "address" }, { "internalType": "uint128", "name": "amount0Requested", "type": "uint128" }, { "internalType": "uint128", "name": "amount1Requested", "type": "uint128" }], "name": "collectProtocol", "outputs": [{ "internalType": "uint128", "name": "amount0", "type": "uint128" }, { "internalType": "uint128", "name": "amount1", "type": "uint128" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "factory", "outputs": [{ "internalType": "address", "name": "", "type": "address" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "fee", "outputs": [{ "internalType": "uint24", "name": "", "type": "uint24" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "feeGrowthGlobal0X128", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "feeGrowthGlobal1X128", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "recipient", "type": "address" }, { "internalType": "uint256", "name": "amount0", "type": "uint256" }, { "internalType": "uint256", "name": "amount1", "type": "uint256" }, { "internalType": "bytes", "name": "data", "type": "bytes" }], "name": "flash", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "uint16", "name": "observationCardinalityNext", "type": "uint16" }], "name": "increaseObservationCardinalityNext", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "uint160", "name": "sqrtPriceX96", "type": "uint160" }], "name": "initialize", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "liquidity", "outputs": [{ "internalType": "uint128", "name": "", "type": "uint128" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "maxLiquidityPerTick", "outputs": [{ "internalType": "uint128", "name": "", "type": "uint128" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "recipient", "type": "address" }, { "internalType": "int24", "name": "tickLower", "type": "int24" }, { "internalType": "int24", "name": "tickUpper", "type": "int24" }, { "internalType": "uint128", "name": "amount", "type": "uint128" }, { "internalType": "bytes", "name": "data", "type": "bytes" }], "name": "mint", "outputs": [{ "internalType": "uint256", "name": "amount0", "type": "uint256" }, { "internalType": "uint256", "name": "amount1", "type": "uint256" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "name": "observations", "outputs": [{ "internalType": "uint32", "name": "blockTimestamp", "type": "uint32" }, { "internalType": "int56", "name": "tickCumulative", "type": "int56" }, { "internalType": "uint160", "name": "secondsPerLiquidityCumulativeX128", "type": "uint160" }, { "internalType": "bool", "name": "initialized", "type": "bool" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "uint32[]", "name": "secondsAgos", "type": "uint32[]" }], "name": "observe", "outputs": [{ "internalType": "int56[]", "name": "tickCumulatives", "type": "int56[]" }, { "internalType": "uint160[]", "name": "secondsPerLiquidityCumulativeX128s", "type": "uint160[]" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }], "name": "positions", "outputs": [{ "internalType": "uint128", "name": "liquidity", "type": "uint128" }, { "internalType": "uint256", "name": "feeGrowthInside0LastX128", "type": "uint256" }, { "internalType": "uint256", "name": "feeGrowthInside1LastX128", "type": "uint256" }, { "internalType": "uint128", "name": "tokensOwed0", "type": "uint128" }, { "internalType": "uint128", "name": "tokensOwed1", "type": "uint128" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "protocolFees", "outputs": [{ "internalType": "uint128", "name": "token0", "type": "uint128" }, { "internalType": "uint128", "name": "token1", "type": "uint128" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "uint8", "name": "feeProtocol0", "type": "uint8" }, { "internalType": "uint8", "name": "feeProtocol1", "type": "uint8" }], "name": "setFeeProtocol", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "slot0", "outputs": [{ "internalType": "uint160", "name": "sqrtPriceX96", "type": "uint160" }, { "internalType": "int24", "name": "tick", "type": "int24" }, { "internalType": "uint16", "name": "observationIndex", "type": "uint16" }, { "internalType": "uint16", "name": "observationCardinality", "type": "uint16" }, { "internalType": "uint16", "name": "observationCardinalityNext", "type": "uint16" }, { "internalType": "uint8", "name": "feeProtocol", "type": "uint8" }, { "internalType": "bool", "name": "unlocked", "type": "bool" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "int24", "name": "tickLower", "type": "int24" }, { "internalType": "int24", "name": "tickUpper", "type": "int24" }], "name": "snapshotCumulativesInside", "outputs": [{ "internalType": "int56", "name": "tickCumulativeInside", "type": "int56" }, { "internalType": "uint160", "name": "secondsPerLiquidityInsideX128", "type": "uint160" }, { "internalType": "uint32", "name": "secondsInside", "type": "uint32" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "recipient", "type": "address" }, { "internalType": "bool", "name": "zeroForOne", "type": "bool" }, { "internalType": "int256", "name": "amountSpecified", "type": "int256" }, { "internalType": "uint160", "name": "sqrtPriceLimitX96", "type": "uint160" }, { "internalType": "bytes", "name": "data", "type": "bytes" }], "name": "swap", "outputs": [{ "internalType": "int256", "name": "amount0", "type": "int256" }, { "internalType": "int256", "name": "amount1", "type": "int256" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "int16", "name": "", "type": "int16" }], "name": "tickBitmap", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "tickSpacing", "outputs": [{ "internalType": "int24", "name": "", "type": "int24" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "int24", "name": "", "type": "int24" }], "name": "ticks", "outputs": [{ "internalType": "uint128", "name": "liquidityGross", "type": "uint128" }, { "internalType": "int128", "name": "liquidityNet", "type": "int128" }, { "internalType": "uint256", "name": "feeGrowthOutside0X128", "type": "uint256" }, { "internalType": "uint256", "name": "feeGrowthOutside1X128", "type": "uint256" }, { "internalType": "int56", "name": "tickCumulativeOutside", "type": "int56" }, { "internalType": "uint160", "name": "secondsPerLiquidityOutsideX128", "type": "uint160" }, { "internalType": "uint32", "name": "secondsOutside", "type": "uint32" }, { "internalType": "bool", "name": "initialized", "type": "bool" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "token0", "outputs": [{ "internalType": "address", "name": "", "type": "address" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "token1", "outputs": [{ "internalType": "address", "name": "", "type": "address" }], "stateMutability": "view", "type": "function" }];
-	nUsdUniswapV3Price;
-	fetch;
-	sumMintN = 0;
-	sumMintNPrice = 0;
+		this.contractABI = [{ "inputs": [], "stateMutability": "nonpayable", "type": "constructor" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "owner", "type": "address" }, { "indexed": true, "internalType": "address", "name": "spender", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "value", "type": "uint256" }], "name": "Approval", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "from", "type": "address" }, { "indexed": true, "internalType": "address", "name": "to", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "value", "type": "uint256" }], "name": "Transfer", "type": "event" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }, { "internalType": "address", "name": "", "type": "address" }], "name": "allowance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_spender", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "approve", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }], "name": "balanceOf", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "decimals", "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "epoch", "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "lastDoublingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "lastMintingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "mint", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "name", "outputs": [{ "internalType": "string", "name": "", "type": "string" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "nextDoublingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "symbol", "outputs": [{ "internalType": "string", "name": "", "type": "string" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "totalSupply", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_to", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "transfer", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_from", "type": "address" }, { "internalType": "address", "name": "_to", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "transferFrom", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }];
 
-    constructor() 
-	{
-		console.log('Private Key:', 'SECRET');
-		console.log('Quicknode RPC:', this.rpcProviderUrl);
-		console.log('Alchemy API Key:', this.alchemyApiKey);
-		console.log('Etherscan API Key:', this.etherscanAPIKey);
-		console.log('Target Market Price Factor:', this.targetMarketPriceFactor);
-		console.log('Target Limit Price:', this.targetLimitPrice);
-		console.log('');
+		this.ethUsdPrice = 1800;
+		this.nUsdUniswapV3Price = 0;
+		this.sumMintN = 0;
+		this.sumMintPrice = 0;
+		this.wallet = null;
+		this.nContract = null;
+		this.mintGas = BigInt(61000);
+		this.mintCost = 0;
+		this.wethAddress = '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2';
+		this.poolAddress = '0x90e7a93E0a6514CB0c84fC7aCC1cb5c0793352d2';
+		this.poolABI = [{ "inputs": [], "stateMutability": "nonpayable", "type": "constructor" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "owner", "type": "address" }, { "indexed": true, "internalType": "int24", "name": "tickLower", "type": "int24" }, { "indexed": true, "internalType": "int24", "name": "tickUpper", "type": "int24" }, { "indexed": false, "internalType": "uint128", "name": "amount", "type": "uint128" }, { "indexed": false, "internalType": "uint256", "name": "amount0", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "amount1", "type": "uint256" }], "name": "Burn", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "owner", "type": "address" }, { "indexed": false, "internalType": "address", "name": "recipient", "type": "address" }, { "indexed": true, "internalType": "int24", "name": "tickLower", "type": "int24" }, { "indexed": true, "internalType": "int24", "name": "tickUpper", "type": "int24" }, { "indexed": false, "internalType": "uint128", "name": "amount0", "type": "uint128" }, { "indexed": false, "internalType": "uint128", "name": "amount1", "type": "uint128" }], "name": "Collect", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "sender", "type": "address" }, { "indexed": true, "internalType": "address", "name": "recipient", "type": "address" }, { "indexed": false, "internalType": "uint128", "name": "amount0", "type": "uint128" }, { "indexed": false, "internalType": "uint128", "name": "amount1", "type": "uint128" }], "name": "CollectProtocol", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "sender", "type": "address" }, { "indexed": true, "internalType": "address", "name": "recipient", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "amount0", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "amount1", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "paid0", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "paid1", "type": "uint256" }], "name": "Flash", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": false, "internalType": "uint16", "name": "observationCardinalityNextOld", "type": "uint16" }, { "indexed": false, "internalType": "uint16", "name": "observationCardinalityNextNew", "type": "uint16" }], "name": "IncreaseObservationCardinalityNext", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": false, "internalType": "uint160", "name": "sqrtPriceX96", "type": "uint160" }, { "indexed": false, "internalType": "int24", "name": "tick", "type": "int24" }], "name": "Initialize", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": false, "internalType": "address", "name": "sender", "type": "address" }, { "indexed": true, "internalType": "address", "name": "owner", "type": "address" }, { "indexed": true, "internalType": "int24", "name": "tickLower", "type": "int24" }, { "indexed": true, "internalType": "int24", "name": "tickUpper", "type": "int24" }, { "indexed": false, "internalType": "uint128", "name": "amount", "type": "uint128" }, { "indexed": false, "internalType": "uint256", "name": "amount0", "type": "uint256" }, { "indexed": false, "internalType": "uint256", "name": "amount1", "type": "uint256" }], "name": "Mint", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": false, "internalType": "uint8", "name": "feeProtocol0Old", "type": "uint8" }, { "indexed": false, "internalType": "uint8", "name": "feeProtocol1Old", "type": "uint8" }, { "indexed": false, "internalType": "uint8", "name": "feeProtocol0New", "type": "uint8" }, { "indexed": false, "internalType": "uint8", "name": "feeProtocol1New", "type": "uint8" }], "name": "SetFeeProtocol", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "sender", "type": "address" }, { "indexed": true, "internalType": "address", "name": "recipient", "type": "address" }, { "indexed": false, "internalType": "int256", "name": "amount0", "type": "int256" }, { "indexed": false, "internalType": "int256", "name": "amount1", "type": "int256" }, { "indexed": false, "internalType": "uint160", "name": "sqrtPriceX96", "type": "uint160" }, { "indexed": false, "internalType": "uint128", "name": "liquidity", "type": "uint128" }, { "indexed": false, "internalType": "int24", "name": "tick", "type": "int24" }], "name": "Swap", "type": "event" }, { "inputs": [{ "internalType": "int24", "name": "tickLower", "type": "int24" }, { "internalType": "int24", "name": "tickUpper", "type": "int24" }, { "internalType": "uint128", "name": "amount", "type": "uint128" }], "name": "burn", "outputs": [{ "internalType": "uint256", "name": "amount0", "type": "uint256" }, { "internalType": "uint256", "name": "amount1", "type": "uint256" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "recipient", "type": "address" }, { "internalType": "int24", "name": "tickLower", "type": "int24" }, { "internalType": "int24", "name": "tickUpper", "type": "int24" }, { "internalType": "uint128", "name": "amount0Requested", "type": "uint128" }, { "internalType": "uint128", "name": "amount1Requested", "type": "uint128" }], "name": "collect", "outputs": [{ "internalType": "uint128", "name": "amount0", "type": "uint128" }, { "internalType": "uint128", "name": "amount1", "type": "uint128" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "recipient", "type": "address" }, { "internalType": "uint128", "name": "amount0Requested", "type": "uint128" }, { "internalType": "uint128", "name": "amount1Requested", "type": "uint128" }], "name": "collectProtocol", "outputs": [{ "internalType": "uint128", "name": "amount0", "type": "uint128" }, { "internalType": "uint128", "name": "amount1", "type": "uint128" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "factory", "outputs": [{ "internalType": "address", "name": "", "type": "address" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "fee", "outputs": [{ "internalType": "uint24", "name": "", "type": "uint24" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "feeGrowthGlobal0X128", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "feeGrowthGlobal1X128", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "recipient", "type": "address" }, { "internalType": "uint256", "name": "amount0", "type": "uint256" }, { "internalType": "uint256", "name": "amount1", "type": "uint256" }, { "internalType": "bytes", "name": "data", "type": "bytes" }], "name": "flash", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "uint16", "name": "observationCardinalityNext", "type": "uint16" }], "name": "increaseObservationCardinalityNext", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "uint160", "name": "sqrtPriceX96", "type": "uint160" }], "name": "initialize", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "liquidity", "outputs": [{ "internalType": "uint128", "name": "", "type": "uint128" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "maxLiquidityPerTick", "outputs": [{ "internalType": "uint128", "name": "", "type": "uint128" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "recipient", "type": "address" }, { "internalType": "int24", "name": "tickLower", "type": "int24" }, { "internalType": "int24", "name": "tickUpper", "type": "int24" }, { "internalType": "uint128", "name": "amount", "type": "uint128" }, { "internalType": "bytes", "name": "data", "type": "bytes" }], "name": "mint", "outputs": [{ "internalType": "uint256", "name": "amount0", "type": "uint256" }, { "internalType": "uint256", "name": "amount1", "type": "uint256" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "name": "observations", "outputs": [{ "internalType": "uint32", "name": "blockTimestamp", "type": "uint32" }, { "internalType": "int56", "name": "tickCumulative", "type": "int56" }, { "internalType": "uint160", "name": "secondsPerLiquidityCumulativeX128", "type": "uint160" }, { "internalType": "bool", "name": "initialized", "type": "bool" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "uint32[]", "name": "secondsAgos", "type": "uint32[]" }], "name": "observe", "outputs": [{ "internalType": "int56[]", "name": "tickCumulatives", "type": "int56[]" }, { "internalType": "uint160[]", "name": "secondsPerLiquidityCumulativeX128s", "type": "uint160[]" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }], "name": "positions", "outputs": [{ "internalType": "uint128", "name": "liquidity", "type": "uint128" }, { "internalType": "uint256", "name": "feeGrowthInside0LastX128", "type": "uint256" }, { "internalType": "uint256", "name": "feeGrowthInside1LastX128", "type": "uint256" }, { "internalType": "uint128", "name": "tokensOwed0", "type": "uint128" }, { "internalType": "uint128", "name": "tokensOwed1", "type": "uint128" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "protocolFees", "outputs": [{ "internalType": "uint128", "name": "token0", "type": "uint128" }, { "internalType": "uint128", "name": "token1", "type": "uint128" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "uint8", "name": "feeProtocol0", "type": "uint8" }, { "internalType": "uint8", "name": "feeProtocol1", "type": "uint8" }], "name": "setFeeProtocol", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "slot0", "outputs": [{ "internalType": "uint160", "name": "sqrtPriceX96", "type": "uint160" }, { "internalType": "int24", "name": "tick", "type": "int24" }, { "internalType": "uint16", "name": "observationIndex", "type": "uint16" }, { "internalType": "uint16", "name": "observationCardinality", "type": "uint16" }, { "internalType": "uint16", "name": "observationCardinalityNext", "type": "uint16" }, { "internalType": "uint8", "name": "feeProtocol", "type": "uint8" }, { "internalType": "bool", "name": "unlocked", "type": "bool" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "int24", "name": "tickLower", "type": "int24" }, { "internalType": "int24", "name": "tickUpper", "type": "int24" }], "name": "snapshotCumulativesInside", "outputs": [{ "internalType": "int56", "name": "tickCumulativeInside", "type": "int56" }, { "internalType": "uint160", "name": "secondsPerLiquidityInsideX128", "type": "uint160" }, { "internalType": "uint32", "name": "secondsInside", "type": "uint32" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "recipient", "type": "address" }, { "internalType": "bool", "name": "zeroForOne", "type": "bool" }, { "internalType": "int256", "name": "amountSpecified", "type": "int256" }, { "internalType": "uint160", "name": "sqrtPriceLimitX96", "type": "uint160" }, { "internalType": "bytes", "name": "data", "type": "bytes" }], "name": "swap", "outputs": [{ "internalType": "int256", "name": "amount0", "type": "int256" }, { "internalType": "int256", "name": "amount1", "type": "int256" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "int16", "name": "", "type": "int16" }], "name": "tickBitmap", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "tickSpacing", "outputs": [{ "internalType": "int24", "name": "", "type": "int24" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "int24", "name": "", "type": "int24" }], "name": "ticks", "outputs": [{ "internalType": "uint128", "name": "liquidityGross", "type": "uint128" }, { "internalType": "int128", "name": "liquidityNet", "type": "int128" }, { "internalType": "uint256", "name": "feeGrowthOutside0X128", "type": "uint256" }, { "internalType": "uint256", "name": "feeGrowthOutside1X128", "type": "uint256" }, { "internalType": "int56", "name": "tickCumulativeOutside", "type": "int56" }, { "internalType": "uint160", "name": "secondsPerLiquidityOutsideX128", "type": "uint160" }, { "internalType": "uint32", "name": "secondsOutside", "type": "uint32" }, { "internalType": "bool", "name": "initialized", "type": "bool" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "token0", "outputs": [{ "internalType": "address", "name": "", "type": "address" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "token1", "outputs": [{ "internalType": "address", "name": "", "type": "address" }], "stateMutability": "view", "type": "function" }];
 
-		if(this.runType == 'LOCAL') {
-			this.initWeb3();
-			this.mintToken().catch();
+	}
+
+	async init() {
+		this.wssWeb3Provider = new WebSocketProvider(this.wssRpcProviderUrl);
+		this.alchemy = new Alchemy({ apiKey: this.alchemyApiKey, network: Network.ETH_MAINNET });
+		this.setupWebSocketReconnect();
+		this.jsonRpcProvider = new JsonRpcProvider(this.jsonRpcProviderUrl);
+
+		this.authSigner = new Wallet(this.authWalletPkey, this.jsonRpcProvider);
+		this.authWalletAddr = this.authSigner.address;
+		this.wallet = new Wallet(this.walletPrivateKey, this.wssWeb3Provider);
+
+		this.flashbots = await FlashbotsBundleProvider.create(
+			this.jsonRpcProvider,
+			this.authSigner,
+			this.flashbotsRpcProviderUrl,
+			'mainnet'
+		);
+
+		this.nContract = new Contract(this.contractAddress, this.contractABI, this.wallet);
+
+		await this.updateGlobals();
+
+		this.listenForMints();
+		this.listenForBlocks();
+
+
+
+		setInterval(() => {
+			const now = Date.now();
+			const minutesSinceActive = (now - this.lastActiveTime) / (1000 * 60);
+
+			console.warn(`⚠️ Inactivity sanity check : Inactive since ` + minutesSinceActive);
+			if (minutesSinceActive > this.nbInactivityMinutes) {
+				console.warn(`⚠️ Inactivity detected (${minutesSinceActive.toFixed(2)} min). Resetting scriptRun and isMintTx.`);
+				this.isMintTx = false;
+				this.justMintedBySomeoneElse = false;
+				this.lastActiveTime = now;
+
+				reconnectWebSocket();
+			}
+		}, 60000); // check every minute
+
+		setInterval(() => {
+			this.reconnectWebSocket();
+		}, 300000); // Every 300s
+	}
+
+	setupWebSocketReconnect() {
+
+		this.alchemy.ws.on('error', async (err) => {
+			console.error(`🚨 WebSocket error: ${err.message}`);
+			await this.reconnectWebSocket();
+		});
+	}
+
+	// 👇 New dynamic pace logic added to adjust TG_MARKET_PRICE factor based on streak and cost
+	// 👇 New dynamic pace logic added to adjust TG_MARKET_PRICE factor based on streak and cost
+	async adjustMarketPriceFactorByStreak() {
+		if (!this.mintStreakWin) this.mintStreakWin = 0;
+		if (!this.mintStreakLoss) this.mintStreakLoss = 0;
+		if (typeof this.targetMarketPriceFactor !== "number") {
+			this.targetMarketPriceFactor = parseFloat(process.env.TG_MARKET_PRICE);
+		}
+
+		const maxDelta = 2; // absolute cap on factor (e.g., 20%)
+		const deltaStep = 0.20; // step to increase/decrease each time
+
+		// Calculate estimated price increase from one more N minted
+		const pricePerN = this.mintCost / Math.max(1, this.sumMintN);
+		const estimatedNextPrice = this.mintCost / (Math.max(1, this.sumMintN + 1));
+		const deltaImpact = (estimatedNextPrice - pricePerN) / pricePerN;
+
+		let direction = 0;
+		if (this.mintStreakLossPerBlock >= 1) {
+			console.log(`⚠️ Lost 1+ mints → Price target factor raised by +${deltaStep}`);
+			direction = 1;
+		} else if (this.mintStreakWin >= 2) {
+			console.log(`⚠️ Win 2+ mints → Price target factor reduced by -${deltaStep}`);
+			direction = -1;
+		}
+
+		let delta = direction * deltaStep;
+
+		// Add or subtract delta from current factor
+		this.targetMarketPriceFactor += delta;
+
+		// Clamp within acceptable range
+		const base = parseFloat(process.env.TG_MARKET_PRICE);
+		const min = base - maxDelta;
+		const max = base + maxDelta;
+
+		this.targetMarketPriceFactor = parseFloat(Math.max(min, Math.min(max, this.targetMarketPriceFactor)).toFixed(6));
+
+		console.log(`📈 Adjusted targetMarketPriceFactor to ${this.targetMarketPriceFactor} (Δ=${delta.toFixed(2)}) based on streak.`);
+	}
+
+	async reconnectWebSocket() {
+		try {
+			// Cleanup listeners
+			if (this.alchemy && this.alchemy.ws) {
+				this.wssWeb3Provider?.destroy?.();
+				this.alchemy.ws.removeAllListeners(); // Add before reconnect
+				await sleep(1000); // give system a breath
+			}
+
+			console.log('🔄 Re-initializing WebSocketProvider and Alchemy...');
+			this.alchemy = new Alchemy({ apiKey: this.alchemyApiKey, network: Network.ETH_MAINNET });
+			this.wssWeb3Provider = new WebSocketProvider(this.wssRpcProviderUrl);
+			this.wallet = new Wallet(this.walletPrivateKey, this.wssWeb3Provider);
+			this.nContract = new Contract(this.contractAddress, this.contractABI, this.wallet);
+
+			// Optional: re-init your event listeners
+			this.listenForMints();
+			this.listenForBlocks();
+
+			this.setupWebSocketReconnect();
+			console.log('✅ WebSocket reconnected.');
+		} catch (e) {
+			console.error('❌ Reconnect failed:', e.message);
+			setTimeout(() => this.reconnectWebSocket(), 5000); // Retry after 5 seconds
 		}
 	}
 
-	async runScript(pk, ak, ek, rpc, tgMarketPriceFactor, tgLimitPrice) {	
-	    this.walletPrivateKey = pk;
-	    this.alchemyApiKey = ak;
-	    this.etherscanAPIKey = ek;
-	    this.rpcProviderUrl = rpc;
-	    this.targetMarketPriceFactor = tgMarketPriceFactor;
-	    this.targetLimitPrice = tgLimitPrice;
-		
-	    this.initWeb3();  
-		this.mintToken().catch();
-	}
-	
-	async stopScript() {
-	    this.scriptRun = false;
-	}
-	
-	calculateTransactionCostTx(tx) {
-		console.log(tx.transaction.hash)
-		this.web3Provider.getTransactionReceipt(tx.transaction.hash, (err, txReceipt) => {
-			if (err) {
-			  console.error('Error getting transaction receipt:', err);
-			} else {
-			  const gasUsed = txReceipt.gasUsed;
-		  
-			  this.web3Provider.getTransaction(txHash, (err, tx) => {
-				if (err) {
-				  console.error('Error getting transaction:', err);
-				} else {
-				  const gasPrice = tx.gasPrice;
-				  const transactionFee = gasUsed * gasPrice;
-		  
-				  console.log('Transaction Fee in Wei:', transactionFee);
-				  console.log('Transaction Fee in ETH:', this.web3Provider.fromWei(transactionFee.toString(), 'ether'));
-				  var usd = this.web3Provider.fromWei(transactionFee.toString(), 'ether') * this.ethUsdPrice;
-				  console.log('Transaction Fee in USD:', usd);
 
-				  return usd
-				}
-			  });
-			}
-		  });
-	}
-	calculateTransactionCostData(gas, gasPrice, gasPriorityFee) {
-		const txGas = parseInt(gas, 16);
-		const txGasPrice = parseInt(gasPrice, 16);
-		const priorityFee = parseInt(gasPriorityFee, 16);
-		const gweiToEth = 1e-9;
+	async adjustTipMultiplier() {
+		if (!this.gwei || !this.mintGas || !this.ethUsdPrice || !this.nUsdUniswapV3Price) {
+			console.warn('⚠️ Missing data to adjust tips accurately');
+			return;
+		}
 
-		const transactionCostEth = txGas *  ethers.formatUnits(txGasPrice, 'gwei') * gweiToEth;
-		const transactionCostUsd = transactionCostEth * this.ethUsdPrice;
+		const baseFeeGwei = parseFloat(this.gwei); // Base gas fee (in Gwei)
+		const ethPriceUsd = parseFloat(this.ethUsdPrice); // ETH price in USD
+		const nPriceUsd = parseFloat(this.nUsdUniswapV3Price); // 1 N in USD
+		const gasUnits = Number(this.mintGas); // Gas units to mint
+		const gweiToEth = (gwei) => (gwei * gasUnits) / 1e9;
+		const ethToUsd = (eth) => eth * ethPriceUsd;
+		const defaultTipPct = this.defaultTipsGwei || 0.02;
 
-		return transactionCostUsd;
-	}
-	initWeb3(){
-		this.web3Provider = new JsonRpcProvider(this.rpcProviderUrl);
-		this.settings = {
-		    apiKey: this.alchemyApiKey,
-		    network: Network.ETH_MAINNET,
-		};
-		this.alchemy = new Alchemy(this.settings);
-		this.alchemy.ws.on(
-		  {
-		    method: AlchemySubscription.MINED_TRANSACTIONS,
-		    addresses: [
-		      {
-		        to: this.contractAddress,
-		      },
-		    ],
-		    includeRemoved: true,
-		    hashesOnly: false,
-		  },
-		  
-		  (tx) => {
-			try {
-				this.timestampLastTx = Date.now();
+		// How many Gwei of tip = cost of 1 N
+		const usdTarget = nPriceUsd * 1.2; // 1.0 multiplier — can make this 1.2 for higher pacing
+		const requiredEthDelta = usdTarget / ethPriceUsd;
+		const requiredGweiDelta = (requiredEthDelta * 1e9) / gasUnits;
 
-				// Log trace last mined tx results
-				console.log('');
-				console.log('');
-				console.log('MINT TX');
-				console.log('');
-
-				if(tx.transaction.from.toLowerCase() == this.wallet.address.toLowerCase()) {
-					this.sumMintN += this.nbMintableBeforeCallFromMyWallet;
-					this.sumMintPrice += this.mintCost;
-
-					console.log('** SUMMARY: N minted = ' + this.sumMintN + ', txPrice = ' + this.mintCost + ' **');
-					// + ' Mint total cost = ' + this.sumMintPrice + ', Mint cost/N = ' + (this.sumMintPrice/this.sumMintN) + ' **');
-				}
-
-				console.log("** N Contract MINT succeed: " + new Date().toLocaleTimeString() + " From: " + tx.transaction.from + " Minted: " + this.nbMintableBeforeZero + " maxFeePerGas: " + this.hexToGwei(tx.transaction.maxFeePerGas) + " maxPriorityFeePerGas: " + this.hexToGwei(tx.transaction.maxPriorityFeePerGas) + " Mint cost: " + this.mintCost + "$ **"); 
-				console.log('');
-			} catch(ex) {
-				console.log(ex);
-			}
-		  }
-		); // Listen any kind of tx call on the contract. It's a lazy way to check that any kind of tx is run on the contract		
-
-		this.wallet = new Wallet(this.walletPrivateKey, this.web3Provider); // Investore wallet init on web3 RPC
-		this.nContract = new Contract(this.contractAddress, this.contractABI, this.wallet); // Contract with investor wallet init 
-	}
-	
-	// It's the simplest mint orchestrator that could be done: refresh global var each 20 sec + check if we should try a mint each 11 sec
-	async mintToken() {
-	    this.fetch = (await import('node-fetch')).default;
-	
-	    // Take last contract tx as the last call to mint... might not be a mint, it's a safety net
-	    this.timestampLastTx = await this.getLastTransactionTime(this.contractAddress, this.etherscanAPIKey);
-	
-	    await this.setGlobal();
-	    setInterval(async () => { await  this.setGlobal() }, (20 *1000)); // Ensure to update global periodicly to reduce nb op on RPC
-	    this.mintTokenNow();
-	    setInterval(async () => { await  this.mintTokenNow() }, (11000)); // Validate each X time if we should mint per actual targets
-	}
-	
-	// FROM N/WETH Uniswap pool
-	async getNUsdPrice() {
-	    const poolContract = new Contract(this.poolAddress, this.poolABI, this.web3Provider);
-	    
-	    const [slot0, token0] = await Promise.all([
-	        poolContract.slot0(),
-	        poolContract.token0()
-	    ]);
-	
-	    const sqrtPriceX96 = BigInt(slot0.sqrtPriceX96.toString()); // Convert to BigInt
-	    const nbToken1ForOneToken0 = (sqrtPriceX96 * sqrtPriceX96) / (BigInt(1) << BigInt(192)); // (p^2) / 2^192
-	
-	    let tokenPriceInUsd;
-	
-	    if (token0.toLowerCase() === this.wethAddress) { // WETH address
-	        tokenPriceInUsd = Number(this.ethUsdPrice) / Number(nbToken1ForOneToken0);
-	    }
-	
-	    return tokenPriceInUsd;
-	}
-	
-	async getLastTransactionTime(contractAddress, apiKey) {
-	    const url = `https://api.etherscan.io/api?module=account&action=txlist&address=${contractAddress}&startblock=0&endblock=99999999&sort=desc&apikey=${apiKey}`;
-	
-	    try {
-	        const response = await axios.get(url);
-	        if (response.data.status === "1" && response.data.result.length > 0) {
-	            const lastTransaction = response.data.result[0];
-	            return new Date(lastTransaction.timeStamp * 1000);
-	        } else {
-	            return Date.now();
-	        }
-	    } catch (error) {
-	        return Date.now()
-	    }
-	}
-	
-	async setGlobal(){
-	    try {
-	        this.feeData = await this.web3Provider.getFeeData();
-
-			try {
-				this.mintGas = await this.nContract.mint.estimateGas({
-					from: this.wallet.address	
-				});
-			} catch(ex) {
-				console.log('Use last mintcost as estimateGas = not able to return a value');
-			}
-
-	        this.maxPriorityFeePerGas = this.feeData.maxPriorityFeePerGas;
-	        this.priorityFee = ethers.parseUnits(this.addTipsGwei, 'gwei');
-	        this.priorityFeePerGas = this.maxPriorityFeePerGas + this.priorityFee;
-	        this.gasPrice = this.feeData.gasPrice;
-	        this.gwei = parseFloat(ethers.formatUnits(this.estGas, 'gwei'));
-	        this.ethUsdPrice = await this.getEthUsdPrice(); 
-	        this.estGasPrice = await this.getGasPriceEthersJs();
-
-	        this.mintCost = (Number(ethers.formatUnits(Number(this.mintGas * this.estGasPrice), 'gwei')) * Number(this.ethUsdPrice))/ 1000000000; // Cost of a mint in USD
-	        this.defaultGasLimit = this.estGas * 2;
-	        this.nUsdUniswapV3Price = await this.getNUsdPrice();
-	        this.targetMaxPrice = this.nUsdUniswapV3Price * this.targetMarketPriceFactor; // Target buy price
-	        this.globalSetDone = true; // Ensure globals has been set at least once before trying a mint
-	    } catch (ex) {
-			console.log(ex);
-	    }
-	} 
-
-	mintCount = 0; // Used to set some sort of variation on the mint price to try defeating the mint bots
-
-	generateRandomBetween(min, max) {
-	    return Math.random() * (max - min) + min;
-	}
-
-	convertBigInt(num){
-		const bigIntValue = BigInt(num);
-
-		if (bigIntValue <= BigInt(Number.MAX_SAFE_INTEGER) && bigIntValue >= BigInt(Number.MIN_SAFE_INTEGER)) {
-			return Number(bigIntValue);
+		// Adjust tip depending on win/loss pattern
+		if (this.mintStreakLossPerFees >= 1) {
+			this.addTipsGwei = Math.max(this.addTipsGwei + requiredGweiDelta, 0);
+			console.log(`⚠️ Lost 1+ mints → Tip raised to +1 N impact ≈ ${this.addTipsGwei.toFixed(6)} Gwei`);
+		} else if (this.mintStreakWin >= 2) {
+			this.addTipsGwei = Math.max(this.addTipsGwei - requiredGweiDelta, 0);
+			console.log(`✅ Won 2+ mints → Tip reduced to stay ≈ +1 N impact ≈ ${this.addTipsGwei.toFixed(6)} Gwei`);
 		} else {
-			console.log("BigInt value is too large to be safely converted to a Number!");
-			return bigIntValue;
-		}		
+			// Reset to default if neutral
+			this.addTipsGwei = defaultTipPct;
+			console.log(`ℹ️ Neutral streak → Reset to default tip ≈ ${(this.addTipsGwei * 100).toFixed(2)}%`);
+		}
 	}
 
-	async getNNBMintable(){
-		this.totalSupply = Number(BigInt(await this.nContract.totalSupply())/ BigInt(1e18));
 
-		var epoch = await this.nContract.epoch();
+	listenForMints() {
+		this.alchemy.ws.on({
+			method: AlchemySubscription.MINED_TRANSACTIONS,
+			addresses: [{ to: this.contractAddress }],
+			includeRemoved: false,
+			hashesOnly: false,
+		}, async (tx) => {
+			this.isMintTx = true;
 
-		var nbNInWallet = await this.nContract.balanceOf(this.wallet.address);
-		console.log('NB N in Wallet' + this.wallet.address);
-		console.log(ethers.formatUnits(nbNInWallet, 'ether'));
+			const txBase = ethers.formatUnits(tx.transaction.gasPrice, 'gwei');
+			const txFeePerGas = ethers.formatUnits(tx.transaction.maxFeePerGas, 'gwei');
+			const txMaxPriorityFeePerGas = ethers.formatUnits(tx.transaction.maxPriorityFeePerGas, 'gwei');
+			const txFeePourcent = (txMaxPriorityFeePerGas / txBase) * 100;
 
-		var lastMintingBlock = await this.nContract.lastMintingBlock();
-		var latestEthBlock = await this.web3Provider.getBlock("latest");
-		var latestEthBlockNumber = Number(latestEthBlock.number);
-		var blocksBetweenMints = Number(BigInt(latestEthBlockNumber) - BigInt(lastMintingBlock));
-		
-		var nbMintable = 0;
+			const from = tx.transaction.from.toLowerCase();
+			const currentBalance = await this.nContract.balanceOf(from);
+			const formattedBalance = ethers.formatUnits(currentBalance, 'ether');
 
-		if (blocksBetweenMints >= this.convertBigInt(2**Number(epoch))) {
-			nbMintable = (blocksBetweenMints/(2**Number(epoch)));
-		}
+			let logMessage = '';
+			if (!(from in this.walletMintHistory)) {
+				this.walletMintHistory[from] = currentBalance;
+				logMessage = ` +? (First mint for this wallet since script started)`;
+			} else {
+				const prevBalance = this.walletMintHistory[from];
+				const diff = currentBalance - prevBalance;
 
-		if(this.nbMintableBeforeZero == undefined || this.nbMintableBeforeZero == 0 || this.nbMintableBeforeZero == NaN)
-			this.nbMintableBeforeZero = nbMintable;
+				logMessage = ` + ${ethers.formatUnits(diff, 'ether')} N since last mint`;
+				this.walletMintHistory[from] = currentBalance; // Update for next time
+			}
 
-		if(nbMintable==0) {
-			this.nbMintableBeforeZero = this.nbMintableBeforeCallFromMyWallet;
-		}
+			const currentBlock = parseInt(tx.transaction.blockNumber, 16);
 
-		return nbMintable;
-	}
+			if (tx.transaction.from.toLowerCase() === this.wallet.address.toLowerCase()) {
 
-	async mintTokenNow() {
+				this.mintStreakLossPerBlock = 0;
+				this.mintStreakLossPerFees = 0;
+				this.mintStreakWin = (this.mintStreakWin || 0) + 1;
+			} else if (
+				(this.competitorLastMintBlock != null &&
+					Array.isArray(this.walletLastMintBlock) &&
+					this.walletLastMintBlock.includes(this.competitorLastMintBlock + 1))
+				||
+				(!Array.isArray(this.walletLastMintBlock))
+			) {
+				console.warn(`⚠️ MINTED 1 BLOCK AFTER COMPETITOR OR COMPETITOR MINTED BEFORE US AT FIRST TRY – Counted as LOSS`);
+				this.mintStreakWin = 0;
+				this.mintStreakLossPerFees = 0;
+				this.mintStreakLossPerBlock = (this.mintStreakLossPerBlock || 0) + 1;
+			} else {
+				console.warn(`⚠️ MINTED WITH SMALLER FEES OR WALLET NOT MINTED YET – Counted as LOSS`);
+				this.competitorLastMintBlock = currentBlock;
+				this.mintStreakWin = 0;
+				this.mintStreakLossPerBlock = 0;
+				this.mintStreakLossPerFees = (this.mintStreakLossPerFees || 0) + 1;
+			}
 
-		
-		if(this.isMintTx == false && this.globalSetDone == true && this.scriptRun == true) {
-	        try {
-			   this.nbMintableBeforeCallFromMyWallet = await this.getNNBMintable();
+			await this.updateGlobals();
+			await this.adjustTipMultiplier();
+			await this.adjustMarketPriceFactorByStreak();
 
-	           var nbMinPrevious = this.minutesDifferenceFromNow(this.timestampLastTx);
-		       var pricePerN = (this.mintCost/this.nbMintableBeforeCallFromMyWallet);
-	           
-	           var actualPricePerNTarget = this.targetMaxPrice;
-			   
-	           if(this.mintCount != 0 ) {
-	                actualPricePerNTarget = this.targetMaxPrice + this.generateRandomBetween(-0.02, 0.02);
-	           }
+			// console.log(parseInt(tx.transaction.blockNumber, 16));
 
-	           //var sec = this.secondsDifferenceFromNow(this.timestampLastTx);
-  
-			   console.log("TARGET $/N: " + actualPricePerNTarget + ", Actual $/N : " + pricePerN + " NB Mintable : " + this.nbMintableBeforeCallFromMyWallet + ' Mint cost $: ' + this.mintCost);
+			if (tx.transaction.from.toLowerCase() === this.wallet.address.toLowerCase()) {
+				const mintGasCost = await this.fetchTransactionFee(tx.transaction.hash);
+				this.sumMintN += 1;
+				this.sumMintPrice += parseFloat(mintGasCost);
+				console.log(``);
 
-	           if(pricePerN <= actualPricePerNTarget && pricePerN <= this.targetLimitPrice){
-	                this.mintCount = (this.mintCount ==2 ? 0: this.mintCount+1);
+				setTimeout(async () => {
+					var nbNInCommunityWallet = await this.nContract.balanceOf(this.wallet.address);
 					console.log('');
-	                console.log('TARGET REACH - Mint tx init : Mintable N: ' + this.nbMintableBeforeCallFromMyWallet + ' Estimated $/N: ' + pricePerN + ' Mint cost $: ' + this.mintCost);
-					await this.mintTokenOp();
-	           }
+					console.warn('⚠️ MINTED BY COMMUNITY WALLET ! block ' + parseInt(tx.transaction.blockNumber, 16) + ' ' + this.wallet.address + ', NB N : ' + ethers.formatUnits(currentBalance, 18) + logMessage);
+					console.log('base: ' + txBase + ' maxFeePerGas: ' + txFeePerGas + ' maxPriorityFeePerGas: ' + txMaxPriorityFeePerGas + ' FeePourcent: ' + txFeePourcent + '%');
+					console.log(``);
 
-	        } catch (ex) {
-	        }
-	    }
+				}, 12000);
+
+			} else {
+				console.log(``);
+				console.warn(`⚠️ MINTED BY SOMEONE ELSE ! block ` + parseInt(tx.transaction.blockNumber, 16) + ' from ' + tx.transaction.from.toLowerCase() + ', NB N : ' + ethers.formatUnits(currentBalance, 18) + logMessage);
+
+				this.justMintedBySomeoneElse = true;
+
+				console.log('base: ' + txBase + ' maxFeePerGas: ' + txFeePerGas + ' maxPriorityFeePerGas: ' + txMaxPriorityFeePerGas + ' FeePourcent: ' + txFeePourcent + '%');
+				console.log(``);
+
+			}
+
+			setTimeout(() => { this.isMintTx = false; this.justMintedBySomeoneElse = false; }, 4000);
+		});
+
 	}
 
+	listenForBlocks() {
+		this.alchemy.ws.on('block', async (blockNumber) => {
+			console.log('block ' + blockNumber);
+			if (this.isMintTx) return;
+			this.lastActiveTime = Date.now();
 
-	async mintTokenOp() {
-	    if(this.isMintTx == false) {
-	        this.isMintTx = true;
-	
-	        try {
-	                var currentNonce = await this.web3Provider.getTransactionCount(this.wallet.address, "latest");
+			try {
+				this.updateGlobals();
 
-	                if(this.minutesDifferenceFromNow(this.timestampLastTx) > 1){
+				const nbMintable = await this.getNNBMintable();
+				const pricePerN = this.mintCost / (nbMintable);
+				const target = this.nUsdUniswapV3Price * this.targetMarketPriceFactor;
+				const block = await this.jsonRpcProvider.getBlock((this.useFlashbots ? "pending" : "latest"));
+				const mintTimestamp = block.timestamp * 1000; // in milliseconds
+				const selectedWallet = pickWallet(mintTimestamp, this.mintWarriorWallets);
 
-	                    const signedTransaction = await this.wallet.signTransaction({
-	                        to: this.contractAddress,
-	                        data: this.nContract.interface.encodeFunctionData("mint"),
-							nonce: currentNonce++,
-	                        gasLimit: 61000, // Default logical limit
-	                        maxPriorityFeePerGas: this.feeData.maxPriorityFeePerGas,
-	                        maxFeePerGas:  (this.feeData.gasPrice * BigInt(130)) / BigInt(100), // Increased by 20% to encourage miners to pick tx fast
-	                        type: 2,
-	                        chainId: 1
-	                    });
+				console.log('Mint warrior picked wallet ' + selectedWallet);
+				console.log('pricePerN <= target ' + (pricePerN <= target ? 'true' : 'false') + ' pricePerN <= this.targetLimitPrice ' + (pricePerN <= this.targetLimitPrice ? 'true' : 'false') + ' !this.isMintTx ' + (!this.isMintTx ? 'true' : 'false') + ' this.wallet.address == selectedWallet ' + (this.wallet.address == selectedWallet ? 'true' : 'false'))
+				if (pricePerN <= target && pricePerN <= this.targetLimitPrice && !this.isMintTx && this.wallet.address == selectedWallet) {
+					console.log('');
+					console.log(`🚀 Let's mint ' Minting at block ${blockNumber} Target: ` + target + ` Actual price: ` + pricePerN + ' MintCost ' + this.mintCost + ' Nb Mintable ' + nbMintable + ' MintCostWithTips ' + this.mintCostWithTips);
+					await this.mintTokenOp(blockNumber);
+				} else {
+					console.log(`⚠️ Don't mint yet ! Target: ` + target + ` Actual price: ` + pricePerN + ' MintCost ' + this.mintCost + ' Nb Mintable ' + nbMintable + ' MintCostWithTips ' + this.mintCostWithTips);
+				}
 
-	                    const heads = await this.web3Provider.send("eth_sendPrivateTransaction", [
-	                    {
-	                      "tx": signedTransaction,
-	                      "preferences": {
-	                        "fast": true,
-	                      }
-	                    },
-	                    ]);
-	                    
-	                    console.log("Contract mint function called from your wallet at " + new Date().toLocaleTimeString() + " Transaction mined: ", heads);
-	
-	                    // Force wait 3 minutes before next trial
-	                    setTimeout( async() => {
-	                        this.isMintTx = false; 
-	                    }, (((3)  * 60 )*1000));
-	                }
-	        } catch (ex) {
-	            console.log(ex);
-	            this.isMintTx = false;
-	        }
-	    }
+			} catch (e) {
+				console.log('⚠️ Block handler error:', e.message);
+			}
+		});
 	}
 
-	hexToGwei(hexValue) {
-	    try {
-	        const decimalValue = BigInt(hexValue);
-	        const weiToGwei = BigInt("1000000000");
-	        const gweiValue = decimalValue / weiToGwei;
-	
-	        return gweiValue.toString();
-	    } catch (ex){
-	        return 0;
-	    }
+	async updateFees() {
+		const block = await this.jsonRpcProvider.getBlock("pending");
+		const baseFee = block.baseFeePerGas;
+
+		this.gwei = await this.getGasPriceInGwei(); // float like 24.3
+		const tipsGwei = (this.gwei * this.addTipsGwei); // float
+
+		const safePriority = BigInt(ethers.parseUnits(tipsGwei.toFixed(9), 'gwei'));
+		let maxFeePerGas = baseFee + safePriority;
+
+		if (safePriority > maxFeePerGas) {
+			maxFeePerGas = safePriority + BigInt(ethers.parseUnits('0.05', 'gwei'));
+		}
+
+		this.maxPriorityFeePerGas = safePriority;
+		this.maxFeePerGas = maxFeePerGas;
+
+		this.mintCost = (Number(this.mintGas) * Number(baseFee) * this.ethUsdPrice) / 1e18;
+		this.mintCostWithTips = (Number(this.mintGas) * Number(baseFee + safePriority) * this.ethUsdPrice) / 1e18;
+
+		return baseFee;
 	}
+
+	async updateGlobals() {
+		let baseFee = await this.updateFees();
+
+		this.ethUsdPrice = await this.getEthUsdPrice();
+
+		try {
+			this.mintGas = await this.estimateGas();
+		} catch (ex) {
+			this.mintGas = BigInt(61000);
+			console.log("Line 273 " + ex);
+			console.log('Use last mintcost as estimateGas = not able to return a value');
+		}
+		if (this.mintGas != NaN)
+			this.mintGas = BigInt(61000);
+
+		this.nUsdUniswapV3Price = await this.getNUsdPrice();
+
+		console.log('');
+		console.log('updateGlobals done ');
+		console.log('');
+	}
+
 
 	async estimateGas() {
-	    try {
-	        const transaction = {
-	            to: this.contractAddress,
-	            data: this.nContract.interface.encodeFunctionData("mint")
-	        };
-	
-	        const estimGas = await this.web3Provider.estimateGas(transaction);
-	
-	        return estimGas;
-	    } catch (error) {
-	    }
+		try {
+			const transaction = {
+				to: this.contractAddress,
+				data: this.nContract.interface.encodeFunctionData("mint")
+			};
+
+			var estimGas = await this.jsonRpcProvider.estimateGas(transaction);
+
+			return estimGas;
+		} catch (ex) {
+			return BigInt(61043); // Default usual value 
+		}
 	}
 
-	async getGasPriceEthersJs() {
-	    try {
-	        const gasPrice = this.feeData.gasPrice;
-	        return gasPrice;
-	    } catch (error) {
-	        console.error('Failed to get gas price from ethers.js, falling back to Etherscan:', error.message);
-	        return null;
-	    }
+	async mintTokenOp(blockNumber) {
+		await this.updateFees();
+		this.isMintTx = true;
+		this.lastActiveTime = Date.now();
+
+		try {
+			if (this.useFlashbots) {
+				const signedTx = await this.getSignedMintTx();
+				this.walletLastMintBlock = []
+				for (let i = 0; i < 3; i++) {
+					this.walletLastMintBlock.push(blockNumber + i);
+					await this.doMintTxOnFlashbots(signedTx, blockNumber + i);
+				}
+			} else {
+				this.walletLastMintBlock = [blockNumber];
+				await this.doMintTxOnPrivate(blockNumber);
+			}
+		} catch (err) {
+			console.log('❌ Mint TX Error:', err.message);
+		} finally {
+			setTimeout(() => { this.isMintTx = false; }, ((this.FlashbotsMintingInXBlock * 12000) + 10000));
+		}
 	}
 
-	minutesDifferenceFromNow(dateToCompare) {
-	    const now = new Date();
-	    const differenceInMilliseconds = now - dateToCompare;
-	    const differenceInMinutes = differenceInMilliseconds / (1000 * 60);
-	    
-	    return differenceInMinutes;
+	async getGasPriceInGwei() {
+		const gasPrice = await this.jsonRpcProvider.send("eth_gasPrice", []);
+		const gasPriceGwei = ethers.formatUnits(gasPrice, "gwei");
+		return gasPriceGwei;
 	}
 
-	
-	secondsDifferenceFromNow(dateToCompare) {
-	    const now = new Date();
-	    const differenceInMilliseconds = now - dateToCompare;
-	    const differenceInMinutes = differenceInMilliseconds / (1000);
-	    
-	    return differenceInMinutes;
+	async getSignedMintTx() {
+		const nonce = await this.jsonRpcProvider.getTransactionCount(this.wallet.address, 'latest');
+
+		console.log('MINT TRIAL - base: ' + this.gwei +
+			' maxFeePerGas: ' + ethers.formatUnits(this.maxFeePerGas, 'gwei') +
+			' maxPriorityFeePerGas: ' + ethers.formatUnits(this.maxPriorityFeePerGas, 'gwei') +
+			' FeePourcent ' + (ethers.formatUnits(this.maxPriorityFeePerGas, 'gwei') / ethers.formatUnits(this.maxFeePerGas, 'gwei') * 100)
+		);
+
+		const tx = {
+			to: this.contractAddress,
+			data: this.nContract.interface.encodeFunctionData("mint"),
+			nonce,
+			gasLimit: this.mintGas,
+			maxPriorityFeePerGas: this.maxPriorityFeePerGas,
+			maxFeePerGas: this.maxFeePerGas,
+			type: 2,
+			chainId: 1
+		};
+
+		return await this.wallet.signTransaction(tx);
 	}
 
-	async checkEthBalanceInUsd() {
-	    const balance = await this.web3Provider.getBalance(this.wallet.address);
-	    const balanceInEth = ethers.formatEther(balance);
-	    const ethUsdPrice = await this.getEthUsdPrice();
-	    const balanceInUsd = (parseFloat(balanceInEth) * ethUsdPrice).toFixed(2);
-	
-	    return balanceInUsd;
+	async getSignedDummyTx() {
+		const nonce = await this.jsonRpcProvider.getTransactionCount(this.wallet.address, 'pending');
+
+		const dummyTx = await this.wallet.signTransaction({
+			to: this.wallet.address,
+			value: 0,
+			nonce: nonce + 1, // one after your mint tx
+			gasLimit: 21000n,
+			maxFeePerGas: this.maxFeePerGas,
+			maxPriorityFeePerGas: this.maxPriorityFeePerGas,
+			type: 2,
+			chainId: 1
+		});
+
+		return dummyTx;
+	}
+
+	async getMintTx() {
+
+		const nonce = await this.jsonRpcProvider.getTransactionCount(this.wallet.address, "latest");
+
+		console.log('MINT TRIAL - base: ' + this.gwei +
+			' maxFeePerGas: ' + ethers.formatUnits(this.maxFeePerGas, 'gwei') +
+			' maxPriorityFeePerGas: ' + ethers.formatUnits(this.maxPriorityFeePerGas, 'gwei'));
+		const tx = {
+			to: this.contractAddress,
+			data: this.nContract.interface.encodeFunctionData("mint"),
+			nonce,
+			gasLimit: this.mintGas,
+			maxFeePerGas: this.maxFeePerGas,
+			maxPriorityFeePerGas: this.maxPriorityFeePerGas,
+			type: 2,
+			chainId: 1
+		};
+
+		return tx;
+	}
+
+	async doMintTxOnPrivate() {
+		console.log('Mint with private BlockNumber');
+
+		const signedTx = await this.getSignedMintTx();
+
+		await this.jsonRpcProvider.send("eth_sendPrivateTransaction", [{ tx: signedTx, preferences: { fast: true } }]);
+	}
+
+	async doMintTxOnFlashbots(signedTx, blockNumber) {
+		console.log('\nFlashbots start minting at block ' + (blockNumber + this.FlashbotsMintingInXBlock) + '\n');
+
+		await Promise.allSettled(sortedFlashbotsRpcs.map(async (rpcUrl) => {
+			try {
+				const bundledTxs = rpcUrl.includes('rpc.mevblocker.io') || rpcUrl.includes('rpc.beaverbuild.org')
+					? [signedTx, await this.getSignedDummyTx()]
+					: [signedTx];
+
+				const bundle = {
+					txs: bundledTxs,
+					blockNumber: `0x${(blockNumber + this.FlashbotsMintingInXBlock).toString(16)}`,
+					minTimestamp: 0,
+					maxTimestamp: 0,
+					revertingTxHashes: [],
+					uuid: randomUUID(),
+				};
+
+				const body = {
+					jsonrpc: "2.0",
+					id: 1,
+					method: (rpcUrl.includes('rpc.flashbots.net') ? "eth_sendRawTransaction" : "eth_sendBundle"),
+					params: [
+						(rpcUrl.includes('rpc.flashbots.net') ? signedTx : {
+							txs: bundledTxs,
+							blockNumber: `0x${(blockNumber + this.FlashbotsMintingInXBlock).toString(16)}`,
+							minTimestamp: 0,
+							maxTimestamp: 0,
+							revertingTxHashes: [],
+							droppingTxHashes: [],
+							uuid: randomUUID(),
+							refundPercent: 0
+						})
+						,
+					],
+				};
+
+				const message = JSON.stringify(body);
+				const signature = await this.authSigner.signMessage(message);
+				const signerAddress = await this.authSigner.getAddress();
+				const recoveredAddress = ethers.verifyMessage(message, signature);
+
+				const header = {
+					'Content-Type': 'application/json',
+					'X-Flashbots-Signature': `${signerAddress}:${signature}`,
+				}
+
+				if (rpcUrl.includes('rpc.flashbots.net')) {
+					if (this.justMintedBySomeoneElse) {
+						console.warn('\n❌ JUST MINTED BY SOMEONE ELSE - MINT BLOCKED\n');
+						return;
+					}
+					const res = await fetch(rpcUrl, {
+						method: "POST",
+						headers: {
+							'Content-Type': 'application/json',
+						},
+						body: JSON.stringify(body)
+					});
+
+					const result = await res.json();
+					if (result.result) {
+						console.log(`📦 Bundle submitted to ${rpcUrl}: `);
+					} else if (result.error) {
+						console.error(`❌ Flashbots submission failed: ${result.error.message}`);
+					} else {
+						console.warn(`⚠️ Unknown response from Flashbots`, result);
+					}
+				} else {
+					if (this.justMintedBySomeoneElse) {
+						console.warn('\n❌ JUST MINTED BY SOMEONE ELSE - MINT BLOCKED\n');
+						return;
+					}
+					const res = await axios.post(rpcUrl, body, {
+						headers: header
+					});
+
+					const result = res.data?.result?.bundleHash || JSON.stringify(res.data || {});
+
+					console.log(`📦 Bundle submitted to ${rpcUrl}: `);
+				}
+			} catch (err) {
+				console.warn(`❌ Error submitting to ${rpcUrl}:`, err.response?.data || err.message);
+			}
+		}));
+
+		console.log('');
+	}
+
+
+	async getNNBMintable() {
+		const lastMintingBlock = await this.nContract.lastMintingBlock();
+		const epoch = await this.nContract.epoch();
+		const latestBlock = await this.jsonRpcProvider.getBlockNumber();
+
+		const blocksSince = latestBlock - Number(lastMintingBlock);
+		const required = 2 ** Number(epoch);
+
+		return blocksSince >= required ? (blocksSince / required) + (this.useFlashbots ? this.FlashbotsMintingInXBlock : 0) : (this.useFlashbots ? this.FlashbotsMintingInXBlock : 0);
+	}
+
+	async getNUsdPrice() {
+		const poolContract = new Contract(this.poolAddress, this.poolABI, this.jsonRpcProvider);
+
+		const [slot0, token0] = await Promise.all([
+			poolContract.slot0(),
+			poolContract.token0()
+		]);
+
+		const sqrtPriceX96 = BigInt(slot0.sqrtPriceX96.toString()); // Convert to BigInt
+		const nbToken1ForOneToken0 = (sqrtPriceX96 * sqrtPriceX96) / (BigInt(1) << BigInt(192)); // (p^2) / 2^192
+
+		let tokenPriceInUsd;
+
+		if (token0.toLowerCase() === this.wethAddress) { // WETH address
+			tokenPriceInUsd = Number(this.ethUsdPrice) / Number(nbToken1ForOneToken0);
+		}
+
+		return tokenPriceInUsd;
+	}
+
+	async fetchTransactionFee(txHash) {
+		try {
+			const txReceipt = await this.jsonRpcProvider.getTransactionReceipt(txHash);
+			const tx = await this.jsonRpcProvider.getTransaction(txHash);
+
+			if (!txReceipt) {
+				return null;
+			}
+
+			if (!tx) {
+				return null;
+			}
+
+			const fee = txReceipt.gasUsed * tx.gasPrice;
+			return ethers.formatEther(fee);
+		} catch (err) {
+			console.error(`❌ Error fetching transaction fee for ${txHash}:`, err.message || err);
+			return null;
+		}
 	}
 
 	async getEthUsdPrice() {
-		const url = 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd';
-	
-		try {
-			const response = await axios.get(url);
-			const data = response.data;
-			// console.log('Ethereum USD Price: ' + data.ethereum.usd);
-			return data.ethereum.usd;
-		} catch (error) {
-			// console.error('Failed to fetch Ethereum price:', error);
-			return this.ethUsdPrice;  // Assumes there is a fallback or default value set elsewhere in your class
-		}
+		const priceFeed = new Contract(
+			'0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419',
+			[{
+				"inputs": [], "name": "latestRoundData", "outputs": [
+					{ "internalType": "uint80", "name": "roundId", "type": "uint80" },
+					{ "internalType": "int256", "name": "answer", "type": "int256" },
+					{ "internalType": "uint256", "name": "startedAt", "type": "uint256" },
+					{ "internalType": "uint256", "name": "updatedAt", "type": "uint256" },
+					{ "internalType": "uint80", "name": "answeredInRound", "type": "uint80" }], "stateMutability": "view", "type": "function"
+			}],
+			this.jsonRpcProvider
+		);
+
+		const data = await priceFeed.latestRoundData();
+		return Number(data.answer) / 1e8;
 	}
 }
 
-if (process.env.NODE_ENV !== 'production') {
-	console.log('NOT PRODUCTION RUN NODE JS')
-	new NMint();
-}
+const instance = new NMintFast();
+instance.init();
+
+
