@@ -34,8 +34,7 @@ export class NMintFast {
 		this.targetMarketPriceFactor = parseFloat(process.env.TG_MARKET_PRICE);
 		this.targetLimitPrice = parseFloat(process.env.TG_LIMIT_PRICE);
 		this.useFlashbots = process.env.USE_FLASHBOTS?.toLowerCase() === 'true'
-		this.addTipsGwei = parseFloat(process.env.TX_TIPS_GWEI_POURCENT);
-		this.defaultTipsGwei = this.addTipsGwei; // Store base config
+
 		this.authWalletPkey = process.env.AUTH_WALLET_PKEY;
 		this.FlashbotsMintingInXBlock = parseFloat(process.env.FLASHBOTS_MINTING_IN_X_BLOCK);
 		this.nbInactivityMinutes = 2
@@ -189,40 +188,6 @@ export class NMintFast {
 	}
 
 
-	async adjustTipMultiplier() {
-		if (!this.gwei || !this.mintGas || !this.ethUsdPrice || !this.nUsdUniswapV3Price) {
-			console.warn('⚠️ Missing data to adjust tips accurately');
-			return;
-		}
-
-		const baseFeeGwei = parseFloat(this.gwei); // Base gas fee (in Gwei)
-		const ethPriceUsd = parseFloat(this.ethUsdPrice); // ETH price in USD
-		const nPriceUsd = parseFloat(this.nUsdUniswapV3Price); // 1 N in USD
-		const gasUnits = Number(this.mintGas); // Gas units to mint
-		const gweiToEth = (gwei) => (gwei * gasUnits) / 1e9;
-		const ethToUsd = (eth) => eth * ethPriceUsd;
-		const defaultTipPct = this.defaultTipsGwei || 0.02;
-
-		// How many Gwei of tip = cost of 1 N
-		const usdTarget = nPriceUsd * 1.2; // 1.0 multiplier — can make this 1.2 for higher pacing
-		const requiredEthDelta = usdTarget / ethPriceUsd;
-		const requiredGweiDelta = (requiredEthDelta * 1e9) / gasUnits;
-
-		// Adjust tip depending on win/loss pattern
-		if (this.mintStreakLossPerFees >= 1) {
-			this.addTipsGwei = Math.max(this.addTipsGwei + requiredGweiDelta, 0);
-			console.log(`⚠️ Lost 1+ mints → Tip raised to +1 N impact ≈ ${this.addTipsGwei.toFixed(6)} Gwei`);
-		} else if (this.mintStreakWin >= 2) {
-			this.addTipsGwei = Math.max(this.addTipsGwei - requiredGweiDelta, 0);
-			console.log(`✅ Won 2+ mints → Tip reduced to stay ≈ +1 N impact ≈ ${this.addTipsGwei.toFixed(6)} Gwei`);
-		} else {
-			// Reset to default if neutral
-			this.addTipsGwei = defaultTipPct;
-			console.log(`ℹ️ Neutral streak → Reset to default tip ≈ ${(this.addTipsGwei * 100).toFixed(2)}%`);
-		}
-	}
-
-
 	listenForMints() {
 		this.alchemy.ws.on({
 			method: AlchemySubscription.MINED_TRANSACTIONS,
@@ -280,7 +245,6 @@ export class NMintFast {
 			}
 
 			await this.updateGlobals();
-			await this.adjustTipMultiplier();
 			await this.adjustMarketPriceFactorByStreak();
 
 			// console.log(parseInt(tx.transaction.blockNumber, 16));
@@ -352,15 +316,9 @@ export class NMintFast {
 		const block = await this.jsonRpcProvider.getBlock("pending");
 		const baseFee = block.baseFeePerGas;
 
-		this.gwei = await this.getGasPriceInGwei(); // float like 24.3
-		const tipsGwei = (this.gwei * this.addTipsGwei); // float
-
-		const safePriority = BigInt(ethers.parseUnits(tipsGwei.toFixed(9), 'gwei'));
-		let maxFeePerGas = baseFee + safePriority;
-
-		if (safePriority > maxFeePerGas) {
-			maxFeePerGas = safePriority + BigInt(ethers.parseUnits('0.05', 'gwei'));
-		}
+		this.gwei = ethers.formatUnits(baseFee, 'gwei');
+		const safePriority = BigInt(await this.jsonRpcProvider.send("eth_maxPriorityFeePerGas", []));
+		const maxFeePerGas = (baseFee * 2n) + safePriority;
 
 		this.maxPriorityFeePerGas = safePriority;
 		this.maxFeePerGas = maxFeePerGas;
@@ -376,15 +334,7 @@ export class NMintFast {
 
 		this.ethUsdPrice = await this.getEthUsdPrice();
 
-		try {
-			this.mintGas = await this.estimateGas();
-		} catch (ex) {
-			this.mintGas = BigInt(61000);
-			console.log("Line 273 " + ex);
-			console.log('Use last mintcost as estimateGas = not able to return a value');
-		}
-		if (this.mintGas != NaN)
-			this.mintGas = BigInt(61000);
+		this.mintGas = await this.estimateGas();
 
 		this.nUsdUniswapV3Price = await this.getNUsdPrice();
 
@@ -431,12 +381,6 @@ export class NMintFast {
 		} finally {
 			setTimeout(() => { this.isMintTx = false; }, ((this.FlashbotsMintingInXBlock * 12000) + 10000));
 		}
-	}
-
-	async getGasPriceInGwei() {
-		const gasPrice = await this.jsonRpcProvider.send("eth_gasPrice", []);
-		const gasPriceGwei = ethers.formatUnits(gasPrice, "gwei");
-		return gasPriceGwei;
 	}
 
 	async getSignedMintTx() {
