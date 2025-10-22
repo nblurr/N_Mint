@@ -13,11 +13,46 @@ import { Alchemy, Network, AlchemySubscription } from 'alchemy-sdk';
 import { FlashbotsBundleProvider } from '@flashbots/ethers-provider-bundle';
 import fetch from 'node-fetch';
 import { randomUUID } from 'crypto';
+import fs from 'fs';
 const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+
+const LOG_FILE = 'mint_log.json';
+
+// Ensure the log file exists and is a valid JSON array
+if (!fs.existsSync(LOG_FILE)) {
+    fs.writeFileSync(LOG_FILE, '[]\n');
+} else {
+    const content = fs.readFileSync(LOG_FILE, 'utf8');
+    if (!content.trim().startsWith('[') || !content.trim().endsWith(']')) {
+        fs.writeFileSync(LOG_FILE, '[]\n'); // Reset if not a valid JSON array
+    }
+}
+
 
 export class NMintFast {
 	constructor() {
 		this.initVars();
+	}
+
+	logUnifiedReport(type, data, source = null) {
+		const logEntry = {
+			timestamp: new Date().toISOString(),
+			type,
+			source,
+			data,
+		};
+
+		// Read the existing content, parse it, add the new entry, and write it back.
+		// This is not ideal for high-frequency logging due to potential performance issues and race conditions,
+		// but it's simple and ensures a valid JSON array structure.
+		try {
+			const fileContent = fs.readFileSync(LOG_FILE, 'utf8');
+			const logs = JSON.parse(fileContent);
+			logs.push(logEntry);
+			fs.writeFileSync(LOG_FILE, JSON.stringify(logs, null, 2) + '\n');
+		} catch (error) {
+			console.error(`Error writing to log file ${LOG_FILE}:`, error);
+		}
 	}
 
 	initVars() {
@@ -34,12 +69,14 @@ export class NMintFast {
 		this.targetMarketPriceFactor = parseFloat(process.env.TG_MARKET_PRICE);
 		this.targetLimitPrice = parseFloat(process.env.TG_LIMIT_PRICE);
 		this.useFlashbots = process.env.USE_FLASHBOTS?.toLowerCase() === 'true'
+		this.sendTx = process.env.SEND_TX?.toLowerCase() === 'true'
 
 		this.authWalletPkey = process.env.AUTH_WALLET_PKEY;
 		this.FlashbotsMintingInXBlock = parseFloat(process.env.FLASHBOTS_MINTING_IN_X_BLOCK);
 		this.nbInactivityMinutes = 2
 		this.isMintTx = false;
 		this.contractAddress = '0xE73d53e3a982ab2750A0b76F9012e18B256Cc243';
+		this.maxMintGasLimit = parseFloat(process.env.MAX_MINT_GAS_LIMIT);
 
 		this.tipsBoost = 1.0; // starts neutral
 		this.lostMintCounter = 0;
@@ -48,6 +85,7 @@ export class NMintFast {
 		this.minTipsBoost = 0.5;
 		this.tipsAdjustStep = 0.2;
 		this.resetTipsAfter = 2; // Reset after this many wins
+		this.maxRewardNPerBlock = new Map(); // Stores blockNumber -> maxRewardN
 
 		this.contractABI = [{ "inputs": [], "stateMutability": "nonpayable", "type": "constructor" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "owner", "type": "address" }, { "indexed": true, "internalType": "address", "name": "spender", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "value", "type": "uint256" }], "name": "Approval", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "from", "type": "address" }, { "indexed": true, "internalType": "address", "name": "to", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "value", "type": "uint256" }], "name": "Transfer", "type": "event" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }, { "internalType": "address", "name": "", "type": "address" }], "name": "allowance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_spender", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "approve", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }], "name": "balanceOf", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "decimals", "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "epoch", "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "lastDoublingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "lastMintingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "mint", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "name", "outputs": [{ "internalType": "string", "name": "", "type": "string" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "nextDoublingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "symbol", "outputs": [{ "internalType": "string", "name": "", "type": "string" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "totalSupply", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_to", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "transfer", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_from", "type": "address" }, { "internalType": "address", "name": "_to", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "transferFrom", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }];
 
@@ -102,13 +140,18 @@ export class NMintFast {
 				this.justMintedBySomeoneElse = false;
 				this.lastActiveTime = now;
 
-				reconnectWebSocket();
+				this.reconnectWebSocket();
 			}
 		}, 60000); // check every minute
 
 		setInterval(() => {
 			this.reconnectWebSocket();
 		}, 300000); // Every 300s
+
+		// New: Update globals every 2 seconds
+		setInterval(async () => {
+			await this.updateGlobals();
+		}, 2000);
 	}
 
 	setupWebSocketReconnect() {
@@ -218,7 +261,23 @@ export class NMintFast {
 				this.walletMintHistory[from] = currentBalance; // Update for next time
 			}
 
-			const currentBlock = parseInt(tx.transaction.blockNumber, 16);
+						const currentBlockNumber = parseInt(tx.transaction.blockNumber, 16);
+
+			const [lastMintBlock, totalSupplyBN] = await Promise.all([
+				this.nContract.lastMintingBlock(),
+				this.nContract.totalSupply()
+			]);
+
+			const { gap, rewardN: calculatedRewardN } = this.computeGapAndReward(currentBlockNumber, lastMintBlock);
+			const rewardNToLog = this.maxRewardNPerBlock.get(currentBlockNumber) || calculatedRewardN;
+			const totalSupply = Number(ethers.formatUnits(totalSupplyBN, 18));
+
+			const actualGasCostEth = Number(ethers.formatUnits(tx.transaction.gasPrice, 'ether')) * parseInt(tx.transaction.gasLimit, 16);
+			const actualGasCostUsd = actualGasCostEth * this.ethUsdPrice;
+
+			const rewardUsd = rewardNToLog * (this.nUsdUniswapV3Price || 0);
+			const profitUsd = rewardUsd - actualGasCostUsd;
+			const meets = profitUsd >= (Number(process.env.MIN_PROFIT_USD ?? 0));
 
 			if (tx.transaction.from.toLowerCase() === this.wallet.address.toLowerCase()) {
 
@@ -252,8 +311,15 @@ export class NMintFast {
 			if (tx.transaction.from.toLowerCase() === this.wallet.address.toLowerCase()) {
 				const mintGasCost = await this.fetchTransactionFee(tx.transaction.hash);
 				this.sumMintN += 1;
-				this.sumMintPrice += parseFloat(mintGasCost);
-				console.log(``);
+				                this.sumMintPrice += parseFloat(mintGasCost);
+				
+				                                				const txReceiptData = await this.logTxReceipt(tx.transaction.hash, this.ethUsdPrice, this.nUsdUniswapV3Price, rewardNToLog, totalSupply, meets);
+				
+				                                				if (txReceiptData) {
+				
+				                                					this.logUnifiedReport("transactionReceipt", txReceiptData, 'mint result');
+				
+				                                				}				console.log(``);
 
 				setTimeout(async () => {
 					var nbNInCommunityWallet = await this.nContract.balanceOf(this.wallet.address);
@@ -265,10 +331,15 @@ export class NMintFast {
 				}, 12000);
 
 			} else {
-				console.log(``);
+
+								                const txReceiptData = await this.logTxReceipt(tx.transaction.hash, this.ethUsdPrice, this.nUsdUniswapV3Price, rewardNToLog, totalSupply, meets);
+								                if (txReceiptData) {
+								                    this.logUnifiedReport("transactionReceipt", txReceiptData, 'mint result');
+								                }				console.log(``);
 				console.warn(`⚠️ MINTED BY SOMEONE ELSE ! block ` + parseInt(tx.transaction.blockNumber, 16) + ' from ' + tx.transaction.from.toLowerCase() + ', NB N : ' + ethers.formatUnits(currentBalance, 18) + logMessage);
 
 				this.justMintedBySomeoneElse = true;
+				
 
 				console.log('base: ' + txBase + ' maxFeePerGas: ' + txFeePerGas + ' maxPriorityFeePerGas: ' + txMaxPriorityFeePerGas + ' FeePourcent: ' + txFeePourcent + '%');
 				console.log(``);
@@ -282,12 +353,25 @@ export class NMintFast {
 
 	listenForBlocks() {
 		this.alchemy.ws.on('block', async (blockNumber) => {
-			console.log('block ' + blockNumber);
-			if (this.isMintTx) return;
+			console.log(' ');
+			// NEW: render report and get decision flag
+			// const { meets } = await this.renderBlockReport(blockNumber);
+			console.log('');
+			// NEW: render next block estimation
+			const { meets } = await this.renderNextBlockReport(blockNumber);
+
+			if (this.isMintTx == false || this.sendTx == false || meets == false)
+     			return;
+
+			console.log('SHOULD NOT REACH THAT POINT ' + this.isMintTx + ' ' + this.sendTx + ' ' + meets);
+			return;
+
 			this.lastActiveTime = Date.now();
 
 			try {
-				this.updateGlobals();
+				console.log('updateGlobals called in listenForBlocks');
+				awaitthis.updateGlobals();
+				console.log('updateGlobals called in listenForBlocks result : ' + this.mintGas);
 
 				const nbMintable = await this.getNNBMintable();
 				const pricePerN = this.mintCost / (nbMintable);
@@ -313,49 +397,126 @@ export class NMintFast {
 	}
 
 	async updateFees() {
-		const block = await this.jsonRpcProvider.getBlock("pending");
-		const baseFee = block.baseFeePerGas;
+		const blockNumber = await this.jsonRpcProvider.getBlockNumber();
+		const feeHistory = await this.jsonRpcProvider.send("eth_feeHistory", [
+			"0x14", // Number of blocks to look back (20 blocks)
+			"latest",
+			[20] // Percentiles for rewards (20th percentile)
+		]);
 
-		this.gwei = ethers.formatUnits(baseFee, 'gwei');
-		const safePriority = BigInt(await this.jsonRpcProvider.send("eth_maxPriorityFeePerGas", []));
-		const maxFeePerGas = (baseFee * 2n) + safePriority;
+		// Get the base fee of the latest block
+		const latestBlock = await this.jsonRpcProvider.getBlock("latest");
+		const baseFeePerGas = latestBlock.baseFeePerGas;
 
-		this.maxPriorityFeePerGas = safePriority;
-		this.maxFeePerGas = maxFeePerGas;
+		// Calculate maxPriorityFeePerGas from the 20th percentile of rewards
+		const rewards = feeHistory.reward.map(r => BigInt(r[0])); // r[0] is the 20th percentile
+		const sumRewards = rewards.reduce((acc, val) => acc + val, 0n);
+		const averagePriorityFee = sumRewards / BigInt(rewards.length);
 
-		this.mintCost = (Number(this.mintGas) * Number(baseFee) * this.ethUsdPrice) / 1e18;
-		this.mintCostWithTips = (Number(this.mintGas) * Number(baseFee + safePriority) * this.ethUsdPrice) / 1e18;
+		// Add a buffer to the baseFeePerGas for the maxFeePerGas to account for potential increases
+		// EIP-1559 base fee can increase by max 12.5% per block
+		const nextBlockBaseFee = baseFeePerGas + (baseFeePerGas / 8n);
 
-		return baseFee;
+		const maxPriorityFee = averagePriorityFee;
+		const maxFee = nextBlockBaseFee + maxPriorityFee;
+
+		this.gwei = ethers.formatUnits(baseFeePerGas, 'gwei');
+		this.maxPriorityFeePerGas = maxPriorityFee;
+		this.maxFeePerGas = maxFee;
+
+		this.mintCost = (Number(this.mintGas) * Number(baseFeePerGas) * this.ethUsdPrice) / 1e18;
+		this.mintCostWithTips = (Number(this.mintGas) * Number(baseFeePerGas + maxPriorityFee) * this.ethUsdPrice) / 1e18;
+
+		return baseFeePerGas;
 	}
 
 	async updateGlobals() {
+		this.ethUsdPrice = await this.getEthUsdPrice();
+		this.mintGas = await this.estimateGasTest();
+
 		let baseFee = await this.updateFees();
 
-		this.ethUsdPrice = await this.getEthUsdPrice();
-
-		this.mintGas = await this.estimateGas();
-
 		this.nUsdUniswapV3Price = await this.getNUsdPrice();
-
-		console.log('');
-		console.log('updateGlobals done ');
-		console.log('');
 	}
 
-
+/*
 	async estimateGas() {
 		try {
+			this.nContract = new Contract(this.contractAddress, this.contractABI, this.wallet);
+
 			const transaction = {
 				to: this.contractAddress,
+				from: this.wallet,  // 👈 include this
 				data: this.nContract.interface.encodeFunctionData("mint")
 			};
 
+			console.log('Waiting estimations ');
 			var estimGas = await this.jsonRpcProvider.estimateGas(transaction);
+			// console.log(`Estimated Gas: ${estimGas}`);
+
+			if (this.maxMintGasLimit && estimGas > this.maxMintGasLimit) {
+				console.warn(`Estimated gas ${estimGas} exceeds MAX_MINT_GAS_LIMIT ${this.maxMintGasLimit}. Capping to ${this.maxMintGasLimit}.`);
+				return BigInt(Math.floor(this.maxMintGasLimit));
+			}
 
 			return estimGas;
 		} catch (ex) {
-			return BigInt(61043); // Default usual value 
+			console.error(`Error estimating gas: ${ex.message}. Using default gas: 61043`);
+			let defaultGas = BigInt(61043);
+			if (this.maxMintGasLimit && defaultGas > this.maxMintGasLimit) {
+				console.warn(`Default gas ${defaultGas} exceeds MAX_MINT_GAS_LIMIT ${this.maxMintGasLimit}. Capping to ${this.maxMintGasLimit}.`);
+				return BigInt(Math.floor(this.maxMintGasLimit));
+			}
+			return defaultGas;
+		}
+	}
+*/
+
+	logCaller(msg) {
+		const err = new Error();
+		const stack = err.stack.split('\n');
+		// stack[0] = "Error"
+		// stack[1] = this function
+		// stack[2] = the actual caller
+		console.log(msg + 'Called from:', stack[2].trim());
+	}
+
+	async estimateGasTest() {
+		try {
+
+			//this.logCaller('estimateGasTest : ');
+			this.jsonRpcProvider = new JsonRpcProvider(this.jsonRpcProviderUrl);
+			this.contractAddress = "0xE73d53e3a982ab2750A0b76F9012e18B256Cc243";
+			this.contractABI = [{ "inputs": [], "stateMutability": "nonpayable", "type": "constructor" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "owner", "type": "address" }, { "indexed": true, "internalType": "address", "name": "spender", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "value", "type": "uint256" }], "name": "Approval", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "from", "type": "address" }, { "indexed": true, "internalType": "address", "name": "to", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "value", "type": "uint256" }], "name": "Transfer", "type": "event" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }, { "internalType": "address", "name": "", "type": "address" }], "name": "allowance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_spender", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "approve", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }], "name": "balanceOf", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "decimals", "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "epoch", "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "lastDoublingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "lastMintingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "mint", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "name", "outputs": [{ "internalType": "string", "name": "", "type": "string" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "nextDoublingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "symbol", "outputs": [{ "internalType": "string", "name": "", "type": "string" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "totalSupply", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_to", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "transfer", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_from", "type": "address" }, { "internalType": "address", "name": "_to", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "transferFrom", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }];
+
+			this.wallet = new Wallet(this.walletPrivateKey, this.jsonRpcProvider);
+
+
+			this.nContract = new Contract(this.contractAddress, this.contractABI, this.wallet);
+
+			const transaction = {
+				to: this.contractAddress,
+				from: this.wallet,  // 👈 include this
+				data: this.nContract.interface.encodeFunctionData("mint")
+			};
+
+			// console.log('Waiting estimations ');
+			var estimGas = await this.jsonRpcProvider.estimateGas(transaction);
+			// console.log(`Estimated Gas: ${estimGas}`);
+
+			if (this.maxMintGasLimit && estimGas > this.maxMintGasLimit) {
+				console.warn(`Estimated gas ${estimGas} exceeds MAX_MINT_GAS_LIMIT ${this.maxMintGasLimit}. Capping to ${this.maxMintGasLimit}.`);
+				return BigInt(Math.floor(this.maxMintGasLimit));
+			}
+			if(this.mintGas != estimGas){
+				console.log(`Estimated gas ${estimGas} different from previous gas ${this.mintGas}. New gas returned : ` + estimGas);
+			}
+
+			return estimGas;
+		} catch (ex) {
+			// console.error(`Error estimating gas: ${ex.message}. Using previous gas: ` + this.mintGas);
+
+			return this.mintGas;
 		}
 	}
 
@@ -370,11 +531,13 @@ export class NMintFast {
 				this.walletLastMintBlock = []
 				for (let i = 0; i < 3; i++) {
 					this.walletLastMintBlock.push(blockNumber + i);
-					await this.doMintTxOnFlashbots(signedTx, blockNumber + i);
+					if(this.sendTx)
+						await this.doMintTxOnFlashbots(signedTx, blockNumber + i);
 				}
 			} else {
 				this.walletLastMintBlock = [blockNumber];
-				await this.doMintTxOnPrivate(blockNumber);
+				if(this.sendTx)
+					await this.doMintTxOnPrivate(blockNumber);
 			}
 		} catch (err) {
 			console.log('❌ Mint TX Error:', err.message);
@@ -541,6 +704,133 @@ export class NMintFast {
 		console.log('');
 	}
 
+	async logTxReceipt(txHash, ethPrice, nPrice, rewardN, totalSupply, meets) {
+		const rpcUrl = "https://rpc.mevblocker.io/";
+
+		// 1️⃣ Batch request: transaction, receipt, block
+		const payload = [
+			{
+			jsonrpc: "2.0",
+			method: "eth_getTransactionByHash",
+			params: [txHash],
+			id: 1
+			},
+			{
+			jsonrpc: "2.0",
+			method: "eth_getTransactionReceipt",
+			params: [txHash],
+			id: 2
+			}
+		];
+
+		const res = await fetch(rpcUrl, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(payload)
+		});
+
+		const json = await res.json();
+		const tx = json.find(r => r.id === 1)?.result;
+		const receipt = json.find(r => r.id === 2)?.result;
+
+		if (!tx || !receipt) {
+			console.error("❌ Transaction or receipt not found. Retry");
+			// This retry logic should ideally be handled by the caller if they want to retry logging
+			// For now, we'll just return null and let the caller decide.
+			return null;
+		}
+
+		// 2️⃣ Fetch the block to get baseFeePerGas
+		const blockRes = await fetch(rpcUrl, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+			jsonrpc: "2.0",
+			method: "eth_getBlockByHash",
+			params: [tx.blockHash, false],
+			id: 3
+			})
+		});
+
+		const blockData = await blockRes.json();
+
+		if (!blockData.result) {
+			console.error("❌ Block data not found for transaction. Cannot calculate baseFeePerGas.");
+			return null;
+		}
+
+		let baseFeeWei = 0;
+		if (blockData.result.baseFeePerGas) {
+			baseFeeWei = parseInt(blockData.result.baseFeePerGas, 16);
+		} else {
+			console.warn("⚠️ baseFeePerGas not found in block data. Setting to 0 for this transaction.");
+		}
+
+		// 3️⃣ Calculate metrics
+		const gasUsed = parseInt(receipt.gasUsed, 16);
+		const effectiveGasPrice = parseInt(receipt.effectiveGasPrice, 16);
+		const priorityFee = effectiveGasPrice - baseFeeWei;
+
+		const totalCostWei = BigInt(gasUsed) * BigInt(effectiveGasPrice);
+		const totalCostEth = Number(totalCostWei) / 1e18;
+		const gasUsd = totalCostEth * ethPrice;
+		const rewardUsd = rewardN * (nPrice || 0);
+		const profitUsd = rewardUsd - gasUsd;
+
+		const formatGwei = v => (v / 1e9).toFixed(4);
+
+		const txReceiptData = {
+			hash: tx.hash,
+			blockNumber: parseInt(tx.blockNumber, 16),
+			from: tx.from,
+			to: tx.to,
+			type: tx.type,
+			nonce: tx.nonce,
+			estimatedGasLimit: parseInt(tx.gas, 16),
+			gasUsed: gasUsed,
+			baseFeeWei: baseFeeWei,
+			baseFeeGwei: Number(formatGwei(baseFeeWei)),
+			priorityFee: priorityFee,
+			priorityFeeGwei: Number(formatGwei(priorityFee)),
+			effectiveGasPrice: effectiveGasPrice,
+			effectiveGasPriceGwei: Number(formatGwei(effectiveGasPrice)),
+			totalCostEth: totalCostEth,
+			gasUsd: gasUsd,
+			nPrice: nPrice || 0,
+			ethPrice: ethPrice || 0,
+			rewardN: rewardN,
+			rewardUsd: rewardUsd,
+			profitUsd: profitUsd,
+			meets: meets,
+			totalSupply: totalSupply,
+			status: receipt.status === "0x1" ? "Success" : "Failed",
+		};
+
+		// Keep console.log for immediate feedback, but also return the data
+		console.log(`
+		===========================
+		🚀 Transaction Summary
+		===========================
+		Hash:               ${txReceiptData.hash}
+		Block:              ${txReceiptData.blockNumber}
+		From:               ${txReceiptData.from}
+		To:                 ${txReceiptData.to}
+		Type:               ${txReceiptData.type}
+		Nonce:              ${txReceiptData.nonce}
+		Estimated Gas Limit: ${txReceiptData.estimatedGasLimit}
+		Gas Used:           ${txReceiptData.gasUsed}
+		---------------------------
+		Base Fee:           ${txReceiptData.baseFeeWei} wei (${formatGwei(txReceiptData.baseFeeWei)} gwei)
+		Priority Fee (Tip): ${txReceiptData.priorityFee} wei (${formatGwei(txReceiptData.priorityFee)} gwei)
+		Effective GasPrice: ${txReceiptData.effectiveGasPrice} wei (${formatGwei(txReceiptData.effectiveGasPrice)} gwei)
+		---------------------------
+		Total Cost:         ${txReceiptData.totalCostEth.toFixed(8)} ETH (${this.formatUsd(txReceiptData.gasUsd)})
+		Status:             ${txReceiptData.status === "Success" ? "✅ Success" : "❌ Failed"}
+		===========================
+		`);
+
+		return txReceiptData;
+	}
 
 	async getNNBMintable() {
 		const lastMintingBlock = await this.nContract.lastMintingBlock();
@@ -594,6 +884,8 @@ export class NMintFast {
 		}
 	}
 
+
+
 	async getEthUsdPrice() {
 		const priceFeed = new Contract(
 			'0x5f4ec3df9cbd43714fe2740f5e3616155c5b8419',
@@ -611,6 +903,189 @@ export class NMintFast {
 		const data = await priceFeed.latestRoundData();
 		return Number(data.answer) / 1e8;
 	}
+
+	formatUsd(x) {
+		return (Number(x) >= 0 ? '$' : '-$') + Math.abs(Number(x)).toFixed(4);
+	}
+
+	formatN(x) {
+		return Number(x).toLocaleString('en-US', { maximumFractionDigits: 0 });
+	}
+
+	// Derive "gap+1" reward model seen in your screenshot
+	computeGapAndReward(currentBlock, lastMintBlock) {
+		const gap = Math.max(0, Number(currentBlock) - Number(lastMintBlock));
+		const rewardN = gap + 1; // matches your sample output
+	return { gap, rewardN };
+	}
+
+	updateMaxRewardNPerBlock(blockNumber, rewardN) {
+		const currentMax = this.maxRewardNPerBlock.get(blockNumber) || 0;
+		this.maxRewardNPerBlock.set(blockNumber, Math.max(currentMax, rewardN));
+
+		// Keep only the last 50 blocks
+		if (this.maxRewardNPerBlock.size > 50) {
+			const oldestBlock = Math.min(...this.maxRewardNPerBlock.keys());
+			this.maxRewardNPerBlock.delete(oldestBlock);
+		}
+	}
+
+	async renderBlockReport(currentBlock) {
+		// fetch on-demand values (use your existing getters)
+		const [lastMintBlock, totalSupplyBN] = await Promise.all([
+			this.nContract.lastMintingBlock(),
+			this.nContract.totalSupply()
+		]);
+
+		const { gap, rewardN } = this.computeGapAndReward(currentBlock, lastMintBlock);
+		const totalSupply = Number(ethers.formatUnits(totalSupplyBN, 18));
+		const nPrice = this.nUsdUniswapV3Price;   // already computed in updateGlobals()
+		const ethPrice = this.ethUsdPrice;        // already computed in updateGlobals()
+
+		// gas numbers already set in updateFees()
+		const baseGwei = Number(this.gwei);
+		const prioGwei = Number(ethers.formatUnits(this.maxPriorityFeePerGas, 'gwei'));
+		const maxGwei  = Number(ethers.formatUnits(this.maxFeePerGas, 'gwei'));
+
+		// economics
+		const rewardUsd = rewardN * (nPrice || 0);
+		const gasUsd    = this.mintCostWithTips ?? this.mintCost ?? 0;
+		const profitUsd = rewardUsd - gasUsd;
+
+		// To review % lost accepted
+		const meets = profitUsd >= (Number(process.env.MIN_PROFIT_USD ?? 0));
+
+		// pretty print
+		const blockReportData = {
+			currentBlock: Number(currentBlock),
+			lastMintBlock: Number(lastMintBlock),
+			gap,
+			rewardN,
+			totalSupply,
+			nPrice: nPrice || 0,
+			ethPrice: ethPrice || 0,
+			baseGwei,
+			prioGwei,
+			maxGwei,
+			effectiveGasPriceGwei: baseGwei + prioGwei,
+			gasUsd,
+			profitUsd,
+			rewardUsd,
+			txFeeEth: (gasUsd / ethPrice),
+			txFeeUsd: gasUsd,
+			meets,
+			mintGas: this.mintGas.toString(), // Convert BigInt to string for JSON
+		};
+
+		this.logUnifiedReport("blockReport", blockReportData, 'block estimation');
+		this.updateMaxRewardNPerBlock(currentBlock, rewardN);
+
+		// pretty print
+		console.log('🌟 BLOCK REPORT 🌟');
+		console.log('----------------------------------------------------');
+		console.log(`📊 Block: #${currentBlock} (Last Mint: #${Number(lastMintBlock)}, Gap: ${gap}, Reward: ${rewardN} N)`);
+		console.log(`💰 Total Supply: ${this.formatN(totalSupply)} N`);
+		console.log(`📈 Market: N=$${(nPrice||0).toFixed(6)}, ETH=$${(ethPrice||0).toFixed(2)}`);
+		console.log(`⛽ Gas: Base=${baseGwei.toFixed(4)} Gwei | Priority=${prioGwei.toFixed(4)} Gwei | Effective GasPrice=${(baseGwei + prioGwei).toFixed(4)} Gwei | Max=${maxGwei.toFixed(4)} Gwei`);
+		console.log(`💸 Tx Fee: ${(gasUsd / ethPrice).toFixed(18)} ETH (${this.formatUsd(gasUsd)})`);
+		console.log(`🔥 Gas Price: ${baseGwei.toFixed(9)} Gwei (${(baseGwei / 1e9).toFixed(18)} ETH) | MintGas: ${this.mintGas}`);
+		console.log(`💲 Profit: Minted value=${this.formatUsd(rewardUsd)} | Mint Cost=${this.formatUsd(gasUsd)} | ROI=${this.formatUsd(profitUsd)})`);
+		console.log(`✅ Status: ${meets ? 'Should Mint' : 'Don\'t Mint'}`);
+		console.log('----------------------------------------------------');
+		return { meets, rewardN, profitUsd };
+	}	
+
+	async renderNextBlockReport(currentBlock) {
+		const nextBlockNumber = currentBlock + 1;
+
+		// Fetch current on-demand values
+		const [lastMintBlock, totalSupplyBN] = await Promise.all([
+			this.nContract.lastMintingBlock(),
+			this.nContract.totalSupply()
+		]);
+
+		const { gap, rewardN } = this.computeGapAndReward(nextBlockNumber, lastMintBlock);
+		const totalSupply = Number(ethers.formatUnits(totalSupplyBN, 18));
+		const nPrice = this.nUsdUniswapV3Price;
+		const ethPrice = this.ethUsdPrice;
+
+		// Estimate next block's base fee
+		const latestBlock = await this.jsonRpcProvider.getBlock("latest");
+		const currentBaseFeePerGas = latestBlock.baseFeePerGas;
+		const estimatedNextBaseFeePerGas = currentBaseFeePerGas + (currentBaseFeePerGas / 8n);
+
+		// Use current maxPriorityFeePerGas (already updated by updateFees)
+		const prioGwei = Number(ethers.formatUnits(this.maxPriorityFeePerGas, 'gwei'));
+		const estimatedNextMaxFeePerGas = estimatedNextBaseFeePerGas + this.maxPriorityFeePerGas;
+
+		const baseGwei = Number(ethers.formatUnits(estimatedNextBaseFeePerGas, 'gwei'));
+		const maxGwei  = Number(ethers.formatUnits(estimatedNextMaxFeePerGas, 'gwei'));
+
+		// Recalculate mintCostWithTips for the next block's estimated fees
+		const estimatedMintCostWithTips = (Number(this.mintGas) * Number(estimatedNextBaseFeePerGas + this.maxPriorityFeePerGas) * this.ethUsdPrice) / 1e18;
+
+		const rewardUsd = rewardN * (nPrice || 0);
+		const gasUsd    = estimatedMintCostWithTips;
+		const profitUsd = rewardUsd - gasUsd;
+
+		const meets = profitUsd >= (Number(process.env.MIN_PROFIT_USD ?? 0));
+
+		const nextBlockReportData = {
+			blockNumber: Number(nextBlockNumber),
+			lastMintBlock: Number(lastMintBlock),
+			gap,
+			rewardN,
+			totalSupply,
+			nPrice: nPrice || 0,
+			ethPrice: ethPrice || 0,
+			baseGwei,
+			prioGwei,
+			maxGwei,
+			effectiveGasPriceGwei: baseGwei + prioGwei,
+			gasUsd: gasUsd,
+			profitUsd,
+			rewardUsd,
+			txFeeEth: (gasUsd / ethPrice),
+			txFeeUsd: gasUsd,
+			meets,
+			mintGas: this.mintGas.toString(), // Convert BigInt to string for JSON
+			estimatedNextBaseFeePerGas: estimatedNextBaseFeePerGas.toString(),
+			estimatedMintCostWithTips: estimatedMintCostWithTips,
+		};
+
+		// Conditional logging: Only log if the current rewardN is greater than or equal to the already recorded max for this block
+		const currentMaxRewardN = this.maxRewardNPerBlock.get(nextBlockNumber) || 0;
+		if (rewardN >= currentMaxRewardN) {
+			this.logUnifiedReport("nextBlockReport", nextBlockReportData, 'next block estimation');
+			this.updateMaxRewardNPerBlock(nextBlockNumber, rewardN);
+		} else {
+			console.log(`Skipping nextBlockReport for block ${nextBlockNumber} as current rewardN (${rewardN}) is less than or equal to recorded max (${currentMaxRewardN}).`);
+		}
+
+				console.log('🔮 NEXT BLOCK ESTIMATE 🔮');
+
+				console.log('----------------------------------------------------');
+
+				console.log(`📊 Block: #${nextBlockNumber} (Last Mint: #${Number(lastMintBlock)}, Gap: ${gap}, Reward: ${rewardN} N)`);
+
+				console.log(`💰 Total Supply: ${this.formatN(totalSupply)} N`);
+
+				console.log(`📈 Market: N=${(nPrice||0).toFixed(6)}, ETH=${(ethPrice||0).toFixed(2)}`);
+
+				console.log(`⛽ Gas: Base=${baseGwei.toFixed(4)} Gwei | Priority=${prioGwei.toFixed(4)} Gwei | Effective GasPrice=${(baseGwei + prioGwei).toFixed(4)} Gwei | Max=${maxGwei.toFixed(4)} Gwei`);
+
+				console.log(`💸 Tx Fee: ${(gasUsd / ethPrice).toFixed(18)} ETH (${this.formatUsd(gasUsd)})`);
+
+				console.log(`🔥 Gas Price: ${baseGwei.toFixed(9)} Gwei (${(baseGwei / 1e9).toFixed(18)} ETH) | MintGas: ${this.mintGas}`);
+
+				console.log(`💲 Profit: Minted value=${this.formatUsd(rewardUsd)} | Mint cost=${this.formatUsd(gasUsd)} | ROI=${this.formatUsd(profitUsd)})`);
+
+				console.log(`✅ Status: ${meets ? 'Should Mint' : 'Don\'t Mint'}`);
+
+				console.log('----------------------------------------------------');
+
+				return { meets, rewardN, profitUsd };
+	}	
 }
 
 const instance = new NMintFast();
