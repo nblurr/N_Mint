@@ -87,6 +87,7 @@ export class NMintFast {
         this.maxMintGasLimit = parseFloat(process.env.MAX_MINT_GAS_LIMIT);
 
         this.tipsBoost = 1.0; // starts neutral
+        this.competitorAggressionBoost = 0;
         this.lostMintCounter = 0;
         this.successMintCounter = 0;
         this.maxTipsBoost = 3.0; // safety cap
@@ -190,6 +191,11 @@ export class NMintFast {
         const maxDeltaTips = 0.5; // absolute cap on tipsBoost
         const deltaStepTips = 0.1; // step to increase/decrease tipsBoost
 
+        // Predictive Priority Fee
+        const competitorPriorityFees = this.getCompetitorPriorityFees();
+        const competitorAvgPriorityFee = competitorPriorityFees.length > 0 ? competitorPriorityFees.reduce((a, b) => a + b, 0) / competitorPriorityFees.length : 0;
+        const predictivePriorityFee = competitorAvgPriorityFee * 1.1; // 10% buffer
+
         let directionFactor = 0;
         let directionTips = 0;
 
@@ -214,6 +220,9 @@ export class NMintFast {
         let deltaTips = directionTips * deltaStepTips;
         this.tipsBoost += deltaTips;
         this.tipsBoost = parseFloat(Math.max(this.minTipsBoost, Math.min(this.maxTipsBoost, this.tipsBoost)).toFixed(2));
+        if (predictivePriorityFee > this.tipsBoost) {
+            this.tipsBoost = predictivePriorityFee;
+        }
         console.log(`⚡ Adjusted tipsBoost to ${this.tipsBoost} (Δ=${deltaTips.toFixed(2)}) based on streak.`);
 
         // Decay competitorAggressionBoost
@@ -405,20 +414,13 @@ export class NMintFast {
 
                 this.sumMintN += 1;
 
-                this.sumMintPrice += parseFloat(mintGasCost);
-
-
-
-                const txReceiptData = await this.logTxReceipt(tx.transaction.hash, this.ethUsdPrice, this.nUsdUniswapV3Price, rewardNToLog, totalSupply, meets, lastMintBlockForLog);
+                                const txReceiptData = await this.logTxReceipt(tx.transaction.hash, this.ethUsdPrice, this.nUsdUniswapV3Price, rewardNToLog, totalSupply, meets, lastMintBlockForLog);
 
 
 
                 if (txReceiptData) {
-
                     this.logUnifiedReport("transactionReceipt", txReceiptData, 'mint result');
-
                     this.cumulativeMintGasUsd += txReceiptData.gasUsd; // Accumulate gasUsd
-
                 }
 
                 console.log(``);
@@ -447,7 +449,7 @@ export class NMintFast {
                 const ourCurrentPriorityFeeGwei = Number(ethers.formatUnits(this.maxPriorityFeePerGas, 'gwei')) * this.tipsBoost;
 
                 if (competitorPriorityFeeGwei > ourCurrentPriorityFeeGwei * 1.2) { // If competitor paid 20% more
-                    this.competitorAggressionBoost = Math.min(this.competitorAggressionBoost + 0.1, 0.5); // Max 50% boost
+                    this.competitorAggressionBoost = Math.min(this.competitorAggressionBoost + 0.1, 1.0); // Max 100% boost
                     // Ensure it's not NaN
                     if (isNaN(this.competitorAggressionBoost)) {
                         this.competitorAggressionBoost = 0;
@@ -464,6 +466,7 @@ export class NMintFast {
         });
 
     }
+
 
     listenForBlocks() {
         this.alchemy.ws.on('block', async (blockNumber) => {
@@ -536,16 +539,17 @@ export class NMintFast {
         const latestBlock = await this.jsonRpcProvider.getBlock("latest");
         const baseFeePerGas = latestBlock.baseFeePerGas;
 
-        // Calculate maxPriorityFeePerGas from the 20th percentile of rewards
+        // Calculate maxPriorityFeePerGas from the 20th percentil1e of rewards
         const rewards = feeHistory.reward.map(r => BigInt(r[0])); // r[0] is the 20th percentile
         const sumRewards = rewards.reduce((acc, val) => acc + val, 0n);
-        const averagePriorityFee = sumRewards / BigInt(rewards.length);
+        const averagePriorityFee = (sumRewards / BigInt(rewards.length));
 
         // Add a buffer to the baseFeePerGas for the maxFeePerGas to account for potential increases
         // EIP-1559 base fee can increase by max 12.5% per block
         const nextBlockBaseFee = baseFeePerGas + (baseFeePerGas / 8n);
 
-        const maxPriorityFee = averagePriorityFee;
+        const boostedPriorityFeeFactor = this.tipsBoost + this.competitorAggressionBoost;
+        const maxPriorityFee = BigInt(Math.round(Number(averagePriorityFee) * boostedPriorityFeeFactor));   
         const maxFee = nextBlockBaseFee + maxPriorityFee;
 
         this.gwei = ethers.formatUnits(baseFeePerGas, 'gwei');
@@ -663,7 +667,7 @@ export class NMintFast {
             if (this.useFlashbots) {
                 const signedTx = await this.getSignedMintTx();
                 this.walletLastMintBlock = []
-                for (let i = 0; i < 3; i++) {
+                for (let i = 0; i < 1; i++) {
                     this.walletLastMintBlock.push(blockNumber + i);
                     console.log('Flashbots - Minting on block ' + (blockNumber + i));
                     if (this.sendTx)
@@ -853,16 +857,29 @@ export class NMintFast {
             }
         ];
 
-        const res = await fetch(rpcUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
-
-        const json = await res.json();
-        const tx = json.find(r => r.id === 1)?.result;
-        const receipt = json.find(r => r.id === 2)?.result;
-
+        		const res = await fetch(rpcUrl, {
+        			method: "POST",
+        			headers: { "Content-Type": "application/json" },
+        			body: JSON.stringify(payload)
+        		});
+        
+        		if (!res.ok) {
+        			const errorText = await res.text();
+        			console.error(`❌ RPC request failed with status ${res.status}: ${errorText}`);
+        			return null;
+        		}
+        
+        		let json;
+        		try {
+        			json = await res.json();
+        		} catch (e) {
+        			const errorText = await res.text();
+        			console.error(`❌ Failed to parse JSON response from RPC: ${e.message}. Raw response: ${errorText}`);
+        			return null;
+        		}
+        
+        		const tx = json.find(r => r.id === 1)?.result;
+        		const receipt = json.find(r => r.id === 2)?.result;
         if (!tx || !receipt) {
             console.error("❌ Transaction or receipt not found. Retry");
             // This retry logic should ideally be handled by the caller if they want to retry logging
@@ -901,9 +918,7 @@ export class NMintFast {
         const effectiveGasPrice = parseInt(receipt.effectiveGasPrice, 16);
         const priorityFee = effectiveGasPrice - baseFeeWei;
 
-        const totalCostWei = BigInt(gasUsed) * BigInt(effectiveGasPrice);
-        const totalCostEth = Number(totalCostWei) / 1e18;
-        const gasUsd = totalCostEth * ethPrice;
+        const gasUsd = this.getTxFeeUsd(receipt, ethPrice);
         const rewardUsd = rewardN * (nPrice || 0);
         const profitUsd = rewardUsd - gasUsd;
 
@@ -924,7 +939,7 @@ export class NMintFast {
             priorityFeeGwei: Number(formatGwei(priorityFee)),
             effectiveGasPrice: effectiveGasPrice,
             effectiveGasPriceGwei: Number(formatGwei(effectiveGasPrice)),
-            totalCostEth: totalCostEth,
+            totalCostEth: gasUsd / ethPrice,
             gasUsd: gasUsd,
             nPrice: nPrice || 0,
             ethPrice: ethPrice || 0,
@@ -1033,6 +1048,55 @@ export class NMintFast {
         return Number(x).toLocaleString('en-US', { maximumFractionDigits: 0 });
     }
 
+    	getTxFeeUsd(receipt, ethPrice) {
+            if (!receipt) {
+                console.warn(`⚠️ getTxFeeUsd: No receipt provided.`);
+                return 0;
+            }
+    
+            if (receipt.gasUsed === undefined || receipt.gasUsed === null) {
+                console.warn(`⚠️ getTxFeeUsd: receipt.gasUsed is undefined or null for receipt:`, receipt);
+                return 0;
+            }
+            if (receipt.effectiveGasPrice === undefined || receipt.effectiveGasPrice === null) {
+                console.warn(`⚠️ getTxFeeUsd: receipt.effectiveGasPrice is undefined or null for receipt:`, receipt);
+                return 0;
+            }
+    
+            const gasUsed = BigInt(receipt.gasUsed);
+            const effectiveGasPrice = BigInt(receipt.effectiveGasPrice);
+            const fee = gasUsed * effectiveGasPrice;
+            const feeEth = ethers.formatEther(fee);
+            const feeUsd = feeEth * ethPrice;
+    
+            console.log(`[Debug] gasUsed: ${gasUsed}, effectiveGasPrice: ${effectiveGasPrice}, fee: ${fee}, feeEth: ${feeEth}, ethPrice: ${ethPrice}, feeUsd: ${feeUsd}`);
+    
+            return feeUsd;
+        }
+    getCompetitorPriorityFees() {
+        try {
+            const logFile = 'mint_log.json';
+            const rawData = fs.readFileSync(logFile);
+            const logs = JSON.parse(rawData);
+            const competitorWallet = '0x82a53178e7a7e454ab31eea6063fdca338418f74';
+            const competitorPriorityFees = [];
+
+            const transactions = logs.filter(log => log.type === 'transactionReceipt');
+
+            transactions.forEach(tx => {
+                const data = tx.data;
+                if (data.status === 'Success' && data.from.toLowerCase() === competitorWallet.toLowerCase()) {
+                    competitorPriorityFees.push(data.priorityFeeGwei);
+                }
+            });
+
+            return competitorPriorityFees;
+        } catch (error) {
+            console.error('Error reading or parsing log file:', error);
+            return [];
+        }
+    }
+
     // Derive "gap+1" reward model seen in your screenshot
     computeGapAndReward(currentBlock, lastMintBlock) {
         const gap = Math.max(0, Number(currentBlock) - Number(lastMintBlock));
@@ -1077,6 +1141,14 @@ export class NMintFast {
         const rewardUsd = rewardN * (nPrice || 0);
         const gasUsd = estimatedMintCostWithTips;
         const profitUsd = rewardUsd - gasUsd;
+
+        if (rewardN > 5) {
+            this.profitSafetyFactor = 0.5;
+        } else if (rewardN > 2) {
+            this.profitSafetyFactor = 0.8;
+        } else {
+            this.profitSafetyFactor = 1.0;
+        }
 
         console.log('this.profitSafetyFactor ', this.profitSafetyFactor);
         const meets = profitUsd >= (Number(process.env.MIN_PROFIT_USD ?? 0) * this.profitSafetyFactor);
