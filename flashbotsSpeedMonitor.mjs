@@ -6,11 +6,11 @@ const flashbotsRpcs = [
     'https://rpc.mevblocker.io/',
     'https://rpc.payload.de/',
     'https://rpc.flashbots.net/fast?hint=hash&blockRange=1',
-	'wss://rpc.ankr.com/eth/ws/2aa46279224f67c5888262071339e0a247d0edc43b38c9bf279638316b0319f8',
+	//'wss://rpc.ankr.com/eth/ws/2aa46279224f67c5888262071339e0a247d0edc43b38c9bf279638316b0319f8',
 	'https://twilight-little-arrow.quiknode.pro/d388e71c753e1c7790cfc46f1da455b78478c362/',
 	//'https://mainnet.ethereum.validationcloud.io/v1/LFOB26RUagLOBXZjx6SH-rqJvQwPpW_B1PtqzPXkbqM',
 	'https://rpc.mevblocker.io/fullprivacy?blockRange=1',
-	'https://eth-mainnet.g.alchemy.com/v2/S_RBXZmrSlFXkr4epQJtR65bnSqtX7VL',
+	//'https://eth-mainnet.g.alchemy.com/v2/S_RBXZmrSlFXkr4epQJtR65bnSqtX7VL',
 	'https://rpc.flashbots.net/fast?hint=hash&blockRange=1',
 ];
 

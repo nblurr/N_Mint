@@ -2,3 +2,4 @@
 scp -i ./n.pem ./NMint.mjs ubuntu@52.23.159.76:/home/ubuntu/N_Mint/
 scp -i ./n.pem ./flashbotsSpeedMonitor.mjs ubuntu@52.23.159.76:/home/ubuntu/N_Mint/
 scp -i ./n.pem ./mintCoordinator.mjs ubuntu@52.23.159.76:/home/ubuntu/N_Mint/
+scp -i ./n.pem ./package.json ubuntu@52.23.159.76:/home/ubuntu/N_Mint/
