@@ -1,4 +1,4 @@
 #!/bin/bash
 pkill node
-nohup node NMint.mjs > output.log 2>&1 &
+killall -9 node | nohup node NMint.mjs 2>&1 | rotatelogs -n 5 -L my-script.log.current mint-script.log 10M &
 less +F output.log
