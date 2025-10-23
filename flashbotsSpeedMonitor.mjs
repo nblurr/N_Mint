@@ -12,6 +12,10 @@ const flashbotsRpcs = [
 	'https://rpc.mevblocker.io/fullprivacy?blockRange=1',
 	//'https://eth-mainnet.g.alchemy.com/v2/S_RBXZmrSlFXkr4epQJtR65bnSqtX7VL',
 	'https://rpc.flashbots.net/fast?hint=hash&blockRange=1',
+    "https://ethereum-rpc.publicnode.com",        // from Allnodes / PublicNode: “Fastest, free-est, and privacy first RPC endpoint for the Ethereum network.”  [oai_citation:0‡PublicNode Ethereum RPC](https://ethereum-rpc.publicnode.com/?utm_source=chatgpt.com)
+    "https://ethereum-public.nodies.app",         // from Nodies via Comparenodes list.  [oai_citation:2‡CompareNodes.com](https://www.comparenodes.com/library/public-endpoints/ethereum/?utm_source=chatgpt.com)
+    "https://rpc.ankr.com/eth",                    // from Ankr: free tier endpoints for Ethereum.  [oai_citation:3‡Ankr](https://www.ankr.com/rpc/eth/?utm_source=chatgpt.com)
+  
 ];
 
 const unsupportedRelays = ['https://rpc.beaverbuild.org/'];

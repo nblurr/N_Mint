@@ -1,2 +1,2 @@
 #!/bin/bash
-scp -i ./n.pem ubuntu@52.23.159.76:/home/ubuntu/N_Mint/NMint_local.mjs ./
+scp -i ./n.pem ubuntu@52.23.159.76:/home/ubuntu/N_Mint/mint_log.json ./

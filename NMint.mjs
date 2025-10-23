@@ -18,15 +18,7 @@ const sleep = (ms) => new Promise(res => setTimeout(res, ms));
 
 const LOG_FILE = 'mint_log.json';
 
-// Ensure the log file exists and is a valid JSON array
-if (!fs.existsSync(LOG_FILE)) {
-    fs.writeFileSync(LOG_FILE, '[]\n');
-} else {
-    const content = fs.readFileSync(LOG_FILE, 'utf8');
-    if (!content.trim().startsWith('[') || !content.trim().endsWith(']')) {
-        fs.writeFileSync(LOG_FILE, '[]\n'); // Reset if not a valid JSON array
-    }
-}
+
 
 
 export class NMintFast {
@@ -45,6 +37,16 @@ export class NMintFast {
         };
 
         try {
+            // Ensure the log file exists and is a valid JSON array
+            if (!fs.existsSync(LOG_FILE)) {
+                fs.writeFileSync(LOG_FILE, '[]\n');
+            } else {
+                const content = fs.readFileSync(LOG_FILE, 'utf8');
+                if (!content.trim().startsWith('[') || !content.trim().endsWith(']')) {
+                    fs.writeFileSync(LOG_FILE, '[]\n'); // Reset if not a valid JSON array
+                }
+            }
+
             let fileContent = fs.readFileSync(LOG_FILE, 'utf8');
             let logs = JSON.parse(fileContent);
 
@@ -69,12 +71,14 @@ export class NMintFast {
         this.lastActiveTime = Date.now();
         this.justMintedBySomeoneElse = false;
         this.walletPrivateKey = process.env.PRIVATE_KEY;
+        this.competitorWallets = ['0x82a53178e7a7e454ab31eea6063fdca338418f74', '0xa22f1ac02b5fc04f2e355c30aebfd82a7465b250'];
         this.wssRpcProviderUrl = process.env.WSS_RPC;
         this.jsonRpcProviderUrl = process.env.JSON_RPC;
         this.flashbotsRpcProviderUrl = process.env.FLASHBOTS_RPC;
         this.alchemyApiKey = process.env.ALCHEMY_KEY;
         this.etherscanAPIKey = process.env.ETHERSCAN_KEY;
-        this.targetMarketPriceFactor = parseFloat(process.env.TG_MARKET_PRICE);
+        this.initialTargetMarketPriceFactor = parseFloat(process.env.TG_MARKET_PRICE);
+        this.targetMarketPriceFactor = this.initialTargetMarketPriceFactor;
         this.targetLimitPrice = parseFloat(process.env.TG_LIMIT_PRICE);
         this.useFlashbots = process.env.USE_FLASHBOTS?.toLowerCase() === 'true'
         this.sendTx = process.env.SEND_TX?.toLowerCase() === 'true'
@@ -86,18 +90,32 @@ export class NMintFast {
         this.contractAddress = '0xE73d53e3a982ab2750A0b76F9012e18B256Cc243';
         this.maxMintGasLimit = parseFloat(process.env.MAX_MINT_GAS_LIMIT);
 
-        this.tipsBoost = 1.0; // starts neutral
+        this.initialTipsBoost = 1.5;
+        this.tipsBoost = this.initialTipsBoost; // starts neutral
         this.competitorAggressionBoost = 0;
         this.lostMintCounter = 0;
         this.successMintCounter = 0;
+        this.consecutiveLostMints = 0; // New: Track consecutive lost mints
+        this.maxConsecutiveLostMints = 5; // New: Threshold for resetting parameters
         this.maxTipsBoost = 3.0; // safety cap
         this.minTipsBoost = 0.5;
-        this.tipsAdjustStep = 0.2;
-        this.resetTipsAfter = 2; // Reset after this many wins
+        this.tipsAdjustStep = 0.3;
+        this.resetTipsAfter = 1; // Reset after this many wins
         this.lastMintBlockHistory = []; // Stores the last 5 lastMintBlock values
-        this.profitSafetyFactor = 1.0; // Safety factor for MIN_PROFIT_USD
+        this.initialProfitSafetyFactor = 1.0;
+        this.profitSafetyFactor = this.initialProfitSafetyFactor; // Safety factor for MIN_PROFIT_USD
         this.initialWalletNBalance = BigInt(0); // Initial N balance of the minting wallet
         this.cumulativeMintGasUsd = 0; // Cumulative gasUsd for our successful mints
+        this.disabledRpcs = new Map(); // Stores { rpcUrl -> reEnableTime } for temporarily disabled RPCs
+
+        this.raceMode = false;
+        this.raceModeCounter = 0;
+        this.raceModeTriggered = false;
+        this.competitorLastMintBlock = 0;
+        this.maxPriorityFeePerGas = 0n;
+        this.averagePriorityFee = 0n;
+        this.maxFeePerGas = 0n;
+        this.competitorMintHistory = {}; // address => { cumulativeGasUsd, cumulativeN, initialNBalance }
 
         this.contractABI = [{ "inputs": [], "stateMutability": "nonpayable", "type": "constructor" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "owner", "type": "address" }, { "indexed": true, "internalType": "address", "name": "spender", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "value", "type": "uint256" }], "name": "Approval", "type": "event" }, { "anonymous": false, "inputs": [{ "indexed": true, "internalType": "address", "name": "from", "type": "address" }, { "indexed": true, "internalType": "address", "name": "to", "type": "address" }, { "indexed": false, "internalType": "uint256", "name": "value", "type": "uint256" }], "name": "Transfer", "type": "event" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }, { "internalType": "address", "name": "", "type": "address" }], "name": "allowance", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_spender", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "approve", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "", "type": "address" }], "name": "balanceOf", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "decimals", "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "epoch", "outputs": [{ "internalType": "uint8", "name": "", "type": "uint8" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "lastDoublingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "lastMintingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "mint", "outputs": [], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [], "name": "name", "outputs": [{ "internalType": "string", "name": "", "type": "string" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "nextDoublingBlock", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "symbol", "outputs": [{ "internalType": "string", "name": "", "type": "string" }], "stateMutability": "view", "type": "function" }, { "inputs": [], "name": "totalSupply", "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }], "stateMutability": "view", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_to", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "transfer", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }, { "inputs": [{ "internalType": "address", "name": "_from", "type": "address" }, { "internalType": "address", "name": "_to", "type": "address" }, { "internalType": "uint256", "name": "_value", "type": "uint256" }], "name": "transferFrom", "outputs": [{ "internalType": "bool", "name": "success", "type": "bool" }], "stateMutability": "nonpayable", "type": "function" }];
 
@@ -136,6 +154,9 @@ export class NMintFast {
 
         // Populate initial N balance
         this.initialWalletNBalance = await this.nContract.balanceOf(this.wallet.address);
+
+        await this.updateFeeHistory();
+        await this.updateFees(await this.jsonRpcProvider.getBlock("pending"));
 
         await this.updateGlobals();
         this.listenForMints();
@@ -179,6 +200,16 @@ export class NMintFast {
     // 👇 New dynamic pace logic added to adjust TG_MARKET_PRICE factor based on streak and cost
     // 👇 New dynamic pace logic added to adjust TG_MARKET_PRICE factor based on streak and cost
     async adjustMintParametersByStreak() {
+        // Check for consecutive lost mints and reset parameters if threshold is met
+        if (this.consecutiveLostMints >= this.maxConsecutiveLostMints) {
+            console.warn(`🔥 ${this.maxConsecutiveLostMints} consecutive lost mints detected. Resetting minting parameters.`);
+            this.targetMarketPriceFactor = this.initialTargetMarketPriceFactor;
+            this.tipsBoost = this.initialTipsBoost;
+            this.profitSafetyFactor = this.initialProfitSafetyFactor;
+            this.consecutiveLostMints = 0; // Reset the counter
+            return; // Skip further adjustments in this cycle
+        }
+
         if (!this.mintStreakWin) this.mintStreakWin = 0;
         if (!this.mintStreakLoss) this.mintStreakLoss = 0;
         if (typeof this.targetMarketPriceFactor !== "number") {
@@ -194,7 +225,7 @@ export class NMintFast {
         // Predictive Priority Fee
         const competitorPriorityFees = this.getCompetitorPriorityFees();
         const competitorAvgPriorityFee = competitorPriorityFees.length > 0 ? competitorPriorityFees.reduce((a, b) => a + b, 0) / competitorPriorityFees.length : 0;
-        const predictivePriorityFee = competitorAvgPriorityFee * 1.1; // 10% buffer
+        const predictivePriorityFee = competitorAvgPriorityFee * 1.2; // 20% buffer
 
         let directionFactor = 0;
         let directionTips = 0;
@@ -221,7 +252,9 @@ export class NMintFast {
         this.tipsBoost += deltaTips;
         this.tipsBoost = parseFloat(Math.max(this.minTipsBoost, Math.min(this.maxTipsBoost, this.tipsBoost)).toFixed(2));
         if (predictivePriorityFee > this.tipsBoost) {
-            this.tipsBoost = predictivePriorityFee;
+            // Instead of directly setting, add a fraction of the difference
+            this.tipsBoost = this.tipsBoost + (predictivePriorityFee - this.tipsBoost) * 0.5; // Add 50% of the difference
+            console.log(`⚡ Predictive Priority Fee (${predictivePriorityFee.toFixed(2)}) was higher. Adjusted tipsBoost to ${this.tipsBoost.toFixed(2)}.`);
         }
         console.log(`⚡ Adjusted tipsBoost to ${this.tipsBoost} (Δ=${deltaTips.toFixed(2)}) based on streak.`);
 
@@ -236,7 +269,7 @@ export class NMintFast {
         }
         // Adjust profitSafetyFactor
         const deltaSafetyLoss = 0.01; // Step to increase safety factor on loss
-        const deltaSafetyWin = 0.10; // Step to decrease safety factor on win
+        const deltaSafetyWin = 0.01; // Step to decrease safety factor on win
         const minSafety = 0.2; // Minimum safety factor
         const maxSafety = 1.5; // Maximum safety factor
 
@@ -254,7 +287,9 @@ export class NMintFast {
             // Cleanup listeners
             if (this.alchemy && this.alchemy.ws) {
                 this.wssWeb3Provider?.destroy?.();
-                this.alchemy.ws.removeAllListeners(); // Add before reconnect
+                const oldAlchemyWs = this.alchemy.ws; // Store old instance
+                this.alchemy = null; // Clear reference to old instance
+                oldAlchemyWs.removeAllListeners(); // Remove listeners from old instance
                 await sleep(1000); // give system a breath
             }
 
@@ -384,6 +419,7 @@ export class NMintFast {
                 this.mintStreakLossPerBlock = 0;
                 this.mintStreakLossPerFees = 0;
                 this.mintStreakWin = (this.mintStreakWin || 0) + 1;
+                this.consecutiveLostMints = 0;
             } else if (
                 (this.competitorLastMintBlock != null &&
                     Array.isArray(this.walletLastMintBlock) &&
@@ -432,17 +468,44 @@ export class NMintFast {
 
 
             } else {
-
                 const txReceiptData = await this.logTxReceipt(tx.transaction.hash, this.ethUsdPrice, this.nUsdUniswapV3Price, rewardNToLog, totalSupply, meets, lastMintBlockForLog);
 
                 if (txReceiptData) {
-
                     this.logUnifiedReport("transactionReceipt", txReceiptData, 'mint result');
+                }
 
-                } console.log(``);
-                console.warn(`⚠️ MINTED BY SOMEONE ELSE ! block ` + parseInt(tx.transaction.blockNumber, 16) + ' from ' + tx.transaction.from.toLowerCase() + ', NB N : ' + ethers.formatUnits(currentBalance, 18) + logMessage);
+                const competitorAddress = tx.transaction.from.toLowerCase();
+                if (!this.competitorMintHistory[competitorAddress]) {
+                    const initialNBalance = await this.nContract.balanceOf(competitorAddress);
+                    this.competitorMintHistory[competitorAddress] = {
+                        cumulativeGasUsd: 0,
+                        cumulativeN: 0,
+                        initialNBalance: initialNBalance
+                    };
+                }
+
+                const competitorEntry = this.competitorMintHistory[competitorAddress];
+                const currentNBalance = await this.nContract.balanceOf(competitorAddress);
+                const initialNBalanceFormatted = ethers.formatUnits(competitorEntry.initialNBalance, 'ether');
+                const currentNBalanceFormatted = ethers.formatUnits(currentNBalance, 'ether');
+                const sumMintN = currentNBalanceFormatted - initialNBalanceFormatted;
+
+                if (txReceiptData) {
+                    competitorEntry.cumulativeGasUsd += txReceiptData.gasUsd;
+                }
+                competitorEntry.cumulativeN = sumMintN;
+
+                console.log(``);
+                console.warn(
+                    `⚠️ MINTED BY SOMEONE ELSE ! block ` + parseInt(tx.transaction.blockNumber, 16) + ` from ` + competitorAddress + `, NB N : ` + ethers.formatUnits(currentBalance, 18) + logMessage +
+                    ` | Initial Competitor N: ${initialNBalanceFormatted}N | Actual Competitor N: ${currentNBalanceFormatted}N` +
+                    ` | Cumulative Competitor Gas USD: ${this.formatUsd(competitorEntry.cumulativeGasUsd)}` +
+                    ` | Cumulative Competitor N: ${competitorEntry.cumulativeN}` +
+                    ` | Cumulative Competitor Avg Cost per N : ${this.formatUsd(competitorEntry.cumulativeGasUsd / Math.max(1, competitorEntry.cumulativeN))}`
+                );
 
                 this.justMintedBySomeoneElse = true;
+                this.consecutiveLostMints++;
 
                 // Check if competitor used significantly higher priority fee
                 const competitorPriorityFeeGwei = Number(txMaxPriorityFeePerGas);
@@ -456,11 +519,12 @@ export class NMintFast {
                     }
                     console.warn(`🔥 Competitor aggression detected! Increasing tipsBoost by ${this.competitorAggressionBoost.toFixed(1)}`);
                 }
+                this.raceModeTriggered = true;
+                this.competitorLastMintBlock = currentBlockNumber;
                 await this.adjustMintParametersByStreak();
 
                 console.log('base: ' + txBase + ' maxFeePerGas: ' + txFeePerGas + ' maxPriorityFeePerGas: ' + txMaxPriorityFeePerGas + ' FeePourcent: ' + txFeePourcent + '%');
                 console.log(``);
-
             }
             setTimeout(() => { this.isMintTx = false; this.justMintedBySomeoneElse = false; }, 4000);
         });
@@ -474,7 +538,12 @@ export class NMintFast {
             console.log('');
             // NEW: render next block estimation
             let nextBlockNumber = blockNumber + 1;
-            const { meets } = await this.renderNextBlockReport(nextBlockNumber);
+            const { meets, pendingBlock} = await this.renderNextBlockReport(nextBlockNumber);
+
+            if (this.raceModeTriggered && (nextBlockNumber - this.competitorLastMintBlock) <= 1) {
+                console.log('🏁 Competitor just minted. Skipping this block to avoid low reward.');
+                return;
+            }
 
             // console.log('MINTING TEST ' + this.isMintTx + ' ' + this.sendTx + ' ' + meets);
             if (this.isMintTx == true || this.sendTx == false || meets == false)
@@ -515,8 +584,8 @@ export class NMintFast {
                 console.log('Mint warrior picked wallet ' + selectedWallet);
                 if (this.wallet.address == selectedWallet && this.isMintTx == false && this.sendTx == true) {
                     console.log('');
-                    console.log(`🚀 Let's mint ' Minting at block ${nextBlockNumber}' lastMintBlockForLog ${lastMintBlockForLog}`);
-                    await this.mintTokenOp(nextBlockNumber);
+                    //console.log(`🚀 Let's mint ' Minting at block ${nextBlockNumber}' lastMintBlockForLog ${lastMintBlockForLog}`);
+                    await this.mintTokenOp(nextBlockNumber, pendingBlock);
                 } else {
                     console.log(`⚠️ Don't mint yet !`);
                 }
@@ -527,36 +596,46 @@ export class NMintFast {
         });
     }
 
-    async updateFees() {
-        const blockNumber = await this.jsonRpcProvider.getBlockNumber();
+    async updateFeeHistory() {
         const feeHistory = await this.jsonRpcProvider.send("eth_feeHistory", [
             "0x14", // Number of blocks to look back (20 blocks)
             "latest",
             [20] // Percentiles for rewards (20th percentile)
         ]);
 
-        // Get the base fee of the latest block
-        const latestBlock = await this.jsonRpcProvider.getBlock("latest");
-        const baseFeePerGas = latestBlock.baseFeePerGas;
-
-        // Calculate maxPriorityFeePerGas from the 20th percentil1e of rewards
         const rewards = feeHistory.reward.map(r => BigInt(r[0])); // r[0] is the 20th percentile
         const sumRewards = rewards.reduce((acc, val) => acc + val, 0n);
-        const averagePriorityFee = (sumRewards / BigInt(rewards.length));
+        this.averagePriorityFee = (sumRewards / BigInt(rewards.length));
+    }
 
+    async updateFees(pendingBlock) {
+        // Get the base fee of the latest block
+        const baseFeePerGas = BigInt(pendingBlock.baseFeePerGas);
+
+        //console.log('updateFees 1');
         // Add a buffer to the baseFeePerGas for the maxFeePerGas to account for potential increases
         // EIP-1559 base fee can increase by max 12.5% per block
         const nextBlockBaseFee = baseFeePerGas + (baseFeePerGas / 8n);
 
+        //console.log('updateFees 2');
         const boostedPriorityFeeFactor = this.tipsBoost + this.competitorAggressionBoost;
-        const maxPriorityFee = BigInt(Math.round(Number(averagePriorityFee) * boostedPriorityFeeFactor));   
+
+        //console.log('updateFees 3');
+        const maxPriorityFee = BigInt(Math.round(Number(this.averagePriorityFee) * boostedPriorityFeeFactor));   
+
+        //console.log('updateFees 4');
         const maxFee = nextBlockBaseFee + maxPriorityFee;
 
+        //console.log('updateFees 5');
         this.gwei = ethers.formatUnits(baseFeePerGas, 'gwei');
+        //console.log('updateFees 6');
         this.maxPriorityFeePerGas = maxPriorityFee;
+        //console.log('updateFees 7');
         this.maxFeePerGas = maxFee;
 
+        //console.log('updateFees 8');
         this.mintCost = (Number(this.mintGas) * Number(baseFeePerGas) * this.ethUsdPrice) / 1e18;
+        //console.log('updateFees 9');
         this.mintCostWithTips = (Number(this.mintGas) * Number(baseFeePerGas + maxPriorityFee) * this.ethUsdPrice) / 1e18;
 
         return baseFeePerGas;
@@ -566,7 +645,7 @@ export class NMintFast {
         this.ethUsdPrice = await this.getEthUsdPrice();
         this.mintGas = await this.estimateGasTest();
 
-        let baseFee = await this.updateFees();
+        await this.updateFeeHistory();
 
         this.nUsdUniswapV3Price = await this.getNUsdPrice();
     }
@@ -652,8 +731,8 @@ export class NMintFast {
         }
     }
 
-    async mintTokenOp(blockNumber) {
-        await this.updateFees();
+    async mintTokenOp(blockNumber, pendingBlock) {
+        await this.updateFees(pendingBlock);
         this.isMintTx = true;
         this.lastActiveTime = Date.now();
 
@@ -665,7 +744,7 @@ export class NMintFast {
 
         try {
             if (this.useFlashbots) {
-                const signedTx = await this.getSignedMintTx();
+                const signedTx = await this.getSignedMintTx(blockNumber);
                 this.walletLastMintBlock = []
                 for (let i = 0; i < 1; i++) {
                     this.walletLastMintBlock.push(blockNumber + i);
@@ -686,13 +765,14 @@ export class NMintFast {
     }
 
 
-    async getSignedMintTx() {
-        const nonce = await this.jsonRpcProvider.getTransactionCount(this.wallet.address, 'latest');
-
+    async getSignedMintTx(blockNumber) {
+        const nonce = await this.jsonRpcProvider.getTransactionCount(this.wallet.address, 'pending');
+        console.log('getSignedMintTx nonce: ' + nonce);
         const tx = {
             to: this.contractAddress,
             data: this.nContract.interface.encodeFunctionData("mint"),
             nonce,
+            blockNumber: BigInt(blockNumber),   
             gasLimit: this.mintGas,
             maxPriorityFeePerGas: this.maxPriorityFeePerGas,
             maxFeePerGas: this.maxFeePerGas,
@@ -703,11 +783,12 @@ export class NMintFast {
         return await this.wallet.signTransaction(tx);
     }
 
-    async getSignedDummyTx() {
+    async getSignedDummyTx(blockNumber) {
         const nonce = await this.jsonRpcProvider.getTransactionCount(this.wallet.address, 'pending');
-
+        console.log('getSignedDummyTx nonce: ' + nonce);
         const dummyTx = await this.wallet.signTransaction({
             to: this.wallet.address,
+            blockNumber: BigInt(blockNumber),
             value: 0,
             nonce: nonce + 1, // one after your mint tx
             gasLimit: 21000n,
@@ -722,7 +803,7 @@ export class NMintFast {
 
     async getMintTx() {
 
-        const nonce = await this.jsonRpcProvider.getTransactionCount(this.wallet.address, "latest");
+        const nonce = await this.jsonRpcProvider.getTransactionCount(this.wallet.address, "pending");
 
         console.log('MINT TRIAL - base: ' + this.gwei +
             ' maxFeePerGas: ' + ethers.formatUnits(this.maxFeePerGas, 'gwei') +
@@ -741,10 +822,10 @@ export class NMintFast {
         return tx;
     }
 
-    async doMintTxOnPrivate() {
+    async doMintTxOnPrivate(blockNumber) {
         console.log('Mint with private BlockNumber');
 
-        const signedTx = await this.getSignedMintTx();
+        const signedTx = await this.getSignedMintTx(blockNumber);
 
         await this.jsonRpcProvider.send("eth_sendPrivateTransaction", [{ tx: signedTx, preferences: { fast: true } }]);
     }
@@ -755,7 +836,7 @@ export class NMintFast {
         await Promise.allSettled(sortedFlashbotsRpcs.map(async (rpcUrl) => {
             try {
                 const bundledTxs = rpcUrl.includes('rpc.mevblocker.io') || rpcUrl.includes('rpc.beaverbuild.org')
-                    ? [signedTx, await this.getSignedDummyTx()]
+                    ? [signedTx, await this.getSignedDummyTx(blockNumber)]
                     : [signedTx];
 
                 const bundle = {
@@ -864,8 +945,12 @@ export class NMintFast {
         		});
         
         		if (!res.ok) {
-        			const errorText = await res.text();
-        			console.error(`❌ RPC request failed with status ${res.status}: ${errorText}`);
+                    if (res.status === 429) {
+                        console.warn(`⚠️ RPC request to ${rpcUrl} failed with status 429 (Too Many Requests). Retrying might be needed.`);
+                    } else {
+        			    const errorText = await res.text();
+        			    console.error(`❌ RPC request failed with status ${res.status}: ${errorText}`);
+                    }
         			return null;
         		}
         
@@ -1069,7 +1154,7 @@ export class NMintFast {
             const feeEth = ethers.formatEther(fee);
             const feeUsd = feeEth * ethPrice;
     
-            console.log(`[Debug] gasUsed: ${gasUsed}, effectiveGasPrice: ${effectiveGasPrice}, fee: ${fee}, feeEth: ${feeEth}, ethPrice: ${ethPrice}, feeUsd: ${feeUsd}`);
+            // ${gasUsed}, effectiveGasPrice: ${effectiveGasPrice}, fee: ${fee}, feeEth: ${feeEth}, ethPrice: ${ethPrice}, feeUsd: ${feeUsd}`);
     
             return feeUsd;
         }
@@ -1106,9 +1191,10 @@ export class NMintFast {
 
     async renderNextBlockReport(nextBlockNumber) {
         // Fetch current on-demand values
-        const [contractLastMintBlock, totalSupplyBN] = await Promise.all([
+        const [contractLastMintBlock, totalSupplyBN, pendingBlock] = await Promise.all([
             this.nContract.lastMintingBlock(),
-            this.nContract.totalSupply()
+            this.nContract.totalSupply(),
+            this.jsonRpcProvider.getBlock("pending")
         ]);
 
         let effectiveLastMintBlock = Number(contractLastMintBlock);
@@ -1123,9 +1209,7 @@ export class NMintFast {
         const totalSupply = Number(ethers.formatUnits(totalSupplyBN, 18)); const nPrice = this.nUsdUniswapV3Price;
         const ethPrice = this.ethUsdPrice;
 
-        // Estimate next block's base fee
-        const latestBlock = await this.jsonRpcProvider.getBlock("latest");
-        const currentBaseFeePerGas = latestBlock.baseFeePerGas;
+        const currentBaseFeePerGas = pendingBlock.baseFeePerGas;
         const estimatedNextBaseFeePerGas = currentBaseFeePerGas + (currentBaseFeePerGas / 8n);
 
         // Use current maxPriorityFeePerGas (already updated by updateFees)
@@ -1142,15 +1226,24 @@ export class NMintFast {
         const gasUsd = estimatedMintCostWithTips;
         const profitUsd = rewardUsd - gasUsd;
 
-        if (rewardN > 5) {
-            this.profitSafetyFactor = 0.5;
-        } else if (rewardN > 2) {
-            this.profitSafetyFactor = 0.8;
-        } else {
-            this.profitSafetyFactor = 1.0;
+        if (this.raceModeTriggered && (nextBlockNumber - this.competitorLastMintBlock >= 2)) {
+            this.raceMode = true;
+            this.raceModeCounter = 3; // Race for the next 3 blocks
+            this.raceModeTriggered = false;
+            console.log('🏎️ Race mode enabled!');
         }
 
-        console.log('this.profitSafetyFactor ', this.profitSafetyFactor);
+        if (this.raceMode) {
+            this.tipsBoost = 5.0; // 5x priority fee in race mode
+            this.profitSafetyFactor = 0.1; // Lower profit safety factor in race mode
+            this.raceModeCounter--;
+            if (this.raceModeCounter === 0) {
+                this.raceMode = false;
+                console.log('🏎️ Race mode disabled.');
+            }
+        }
+
+        // console.log('this.profitSafetyFactor ', this.profitSafetyFactor);
         const meets = profitUsd >= (Number(process.env.MIN_PROFIT_USD ?? 0) * this.profitSafetyFactor);
 
         const nextBlockReportData = {
@@ -1211,7 +1304,7 @@ export class NMintFast {
 
         console.log('----------------------------------------------------');
 
-        return { meets, rewardN, profitUsd };
+        return { meets, rewardN, profitUsd, pendingBlock };
     }
 }
 
