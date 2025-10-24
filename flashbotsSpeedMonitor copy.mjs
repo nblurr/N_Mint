@@ -2,21 +2,26 @@ import axios from 'axios';
 import { performance } from 'perf_hooks';
 import WebSocket from 'ws';
 
-/*
-
+const flashbotsRpcs = [
+    'https://rpc.mevblocker.io/',
     'https://rpc.payload.de/',
     'https://rpc.flashbots.net/fast?hint=hash&blockRange=1',
+	//'wss://rpc.ankr.com/eth/ws/2aa46279224f67c5888262071339e0a247d0edc43b38c9bf279638316b0319f8',
 	'https://twilight-little-arrow.quiknode.pro/d388e71c753e1c7790cfc46f1da455b78478c362/',
+	//'https://mainnet.ethereum.validationcloud.io/v1/LFOB26RUagLOBXZjx6SH-rqJvQwPpW_B1PtqzPXkbqM',
 	'https://rpc.mevblocker.io/fullprivacy?blockRange=1',
+	//'https://eth-mainnet.g.alchemy.com/v2/S_RBXZmrSlFXkr4epQJtR65bnSqtX7VL',
 	'https://rpc.flashbots.net/fast?hint=hash&blockRange=1',
     "https://ethereum-rpc.publicnode.com",        // from Allnodes / PublicNode: “Fastest, free-est, and privacy first RPC endpoint for the Ethereum network.”  [oai_citation:0‡PublicNode Ethereum RPC](https://ethereum-rpc.publicnode.com/?utm_source=chatgpt.com)
     "https://ethereum-public.nodies.app",         // from Nodies via Comparenodes list.  [oai_citation:2‡CompareNodes.com](https://www.comparenodes.com/library/public-endpoints/ethereum/?utm_source=chatgpt.com)
-*/
-
-const flashbotsRpcs = [
-    'https://twilight-little-arrow.quiknode.pro/d388e71c753e1c7790cfc46f1da455b78478c362/',
-    'https://rpc.mevblocker.io/fullprivacy?blockRange=1',
     "https://rpc.ankr.com/eth",                    // from Ankr: free tier endpoints for Ethereum.  [oai_citation:3‡Ankr](https://www.ankr.com/rpc/eth/?utm_source=chatgpt.com)
+];
+
+const unsortedRelays = [
+  { url: "https://rpc.payload.de", method: "eth_sendBundle" },
+  { url: "https://relay.flashbots.net", method: "mev_sendBundle" }, // Flashbots builder
+  { url: "https://rpc.beaverbuild.org", method: "eth_sendBundle" },  // Beaverbuild
+  { url: "https://eth-builder.com",     method: "eth_sendBundle" },  // builder0x69
 ];
 
 const unsupportedRelays = ['https://rpc.beaverbuild.org/'];
@@ -24,6 +29,7 @@ const unsupportedRelays = ['https://rpc.beaverbuild.org/'];
 const allRelays = [...flashbotsRpcs, ...unsupportedRelays];
 
 export let sortedFlashbotsRpcs = [...flashbotsRpcs];
+export let relays = [...unsortedRelays];
 
 const payload = {
     jsonrpc: '2.0',

@@ -4,11 +4,11 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-import { sortedFlashbotsRpcs } from './flashbotsSpeedMonitor.mjs';
+import { sortedFlashbotsRpcs} from './flashbotsSpeedMonitor.mjs';
 import { pickWallet } from './mintCoordinator.mjs';
 
 import axios from 'axios';
-import { ethers, Wallet, Contract, JsonRpcProvider, WebSocketProvider, toUtf8Bytes } from 'ethers';
+import { ethers, Wallet, Contract, JsonRpcProvider, WebSocketProvider, verifyMessage } from 'ethers';
 import { Alchemy, Network, AlchemySubscription } from 'alchemy-sdk';
 import { FlashbotsBundleProvider } from '@flashbots/ethers-provider-bundle';
 import fetch from 'node-fetch';
@@ -184,7 +184,9 @@ export class NMintFast {
             ⚠️ Inactivity sanity check : Inactive since ` + minutesSinceActive) + `
             `;
             if (minutesSinceActive > this.nbInactivityMinutes) {
-                console.warn(`⚠️ Inactivity detected (${minutesSinceActive.toFixed(2)} min). Resetting scriptRun and isMintTx.`);
+                console.warn(`
+            ⚠️ Inactivity detected (${minutesSinceActive.toFixed(2)} min). Resetting scriptRun and isMintTx.
+                `);
                 this.isMintTx = false;
                 this.justMintedBySomeoneElse = false;
                 this.lastActiveTime = now;
@@ -208,7 +210,9 @@ export class NMintFast {
             for (let [rpcUrl, reEnableTime] of this.disabledRpcs.entries()) {
                 if (now >= reEnableTime) {
                     this.disabledRpcs.delete(rpcUrl);
-                    console.log(`✅ Re-enabling RPC: ${rpcUrl}`);
+                    console.log(`
+            ✅ Re-enabling RPC: ${rpcUrl}
+                    `);
                 }
             }
         }, 60000); // Check every minute
@@ -227,7 +231,7 @@ export class NMintFast {
         // Check for consecutive lost mints and reset parameters if threshold is met
         if (this.consecutiveLostMints >= this.maxConsecutiveLostMints) {
             console.warn(`
-                🔥 ${this.maxConsecutiveLostMints} consecutive lost mints detected. Resetting minting parameters.
+            🔥 ${this.maxConsecutiveLostMints} consecutive lost mints detected. Resetting minting parameters.
             `);
             this.targetMarketPriceFactor = this.initialTargetMarketPriceFactor;
             this.tipsBoost = this.initialTipsBoost;
@@ -335,7 +339,9 @@ export class NMintFast {
                 await sleep(1000); // give system a breath
             }
 
-            console.log('🔄 Re-initializing WebSocketProvider and Alchemy...');
+            console.log(`
+            🔄 Re-initializing WebSocketProvider and Alchemy...
+            `);
             this.alchemy = new Alchemy({ apiKey: this.alchemyApiKey, network: Network.ETH_MAINNET });
             this.wssWeb3Provider = new WebSocketProvider(this.wssRpcProviderUrl);
             this.wallet = new Wallet(this.walletPrivateKey, this.wssWeb3Provider);
@@ -346,9 +352,13 @@ export class NMintFast {
             this.listenForBlocks();
 
             this.setupWebSocketReconnect();
-            console.log('✅ WebSocket reconnected.');
+            console.log(`
+                ✅ WebSocket reconnected.
+            `);
         } catch (e) {
-            console.error('❌ Reconnect failed:', e.message);
+            console.error(`
+            ❌ Reconnect failed:`, e.message);
+            console.error(``)
             setTimeout(() => this.reconnectWebSocket(), 5000); // Retry after 5 seconds
         }
     }
@@ -492,14 +502,14 @@ export class NMintFast {
                 (!Array.isArray(this.walletLastMintBlock))
             ) {
                 console.warn(`
-                    ⚠️ MINTED 1 BLOCK AFTER COMPETITOR OR COMPETITOR MINTED BEFORE US AT FIRST TRY – Counted as LOSS
+            ⚠️ MINTED 1 BLOCK AFTER COMPETITOR OR COMPETITOR MINTED BEFORE US AT FIRST TRY – Counted as LOSS
                 `);
                 this.mintStreakWin = 0;
                 this.mintStreakLossPerFees = 0;
                 this.mintStreakLossPerBlock = (this.mintStreakLossPerBlock || 0) + 1;
             } else {
                 console.warn(`
-                    ⚠️ MINTED WITH SMALLER FEES OR FIRST – Counted as LOSS
+            ⚠️ MINTED WITH SMALLER FEES OR FIRST – Counted as LOSS
                 `);
                 this.competitorLastMintBlock = currentBlockNumber;
                 this.mintStreakWin = 0;
@@ -616,7 +626,7 @@ export class NMintFast {
                     ---------------------------
                     Total Gas Paid:         ${this.formatUsd(competitorEntry.cumulativeGasUsd)}
                     Total N Minted:         ${parseFloat(diffBetweenPrevAndCurrent)} N
-                    Total Avg Cost per N:   ${this.formatUsd(parseFloat(competitorEntry.cumulativeGasUsd) / Math.max(1, parseFloat(competitorEntry.cumulativeN)))}
+                    Total Avg Cost per N:   ${this.formatUsd(parseFloat(competitorEntry.cumulativeGasUsd) / Math.max(1, parseFloat(diffBetweenPrevAndCurrent)))}
                     ---------------------------
                     N Initial Balance:      ${ethers.formatUnits(initialBalance, 18)} N
                     N Previous Balance:     ${ethers.formatUnits(prevBalance, 18)} N
@@ -643,7 +653,7 @@ export class NMintFast {
                         this.competitorAggressionBoost = 0;
                     }
                     console.warn(`
-🔥 Competitor aggression detected! Increasing tipsBoost by ${this.competitorAggressionBoost.toFixed(1)}
+            🔥 Competitor aggression detected! Increasing tipsBoost by ${this.competitorAggressionBoost.toFixed(1)}
                     `);
                 }
                 this.raceModeTriggered = true;
@@ -727,7 +737,7 @@ export class NMintFast {
             } catch (e) {
                 console.log(`
             ⚠️ Block handler error:`, e.message);
-                console.log(``
+                console.log(``);
             }
         });
     }
@@ -819,11 +829,15 @@ export class NMintFast {
             // console.log(`Estimated Gas: ${estimGas}`);
 
             if (this.maxMintGasLimit && estimGas > this.maxMintGasLimit) {
-                console.warn(`Estimated gas ${estimGas} exceeds MAX_MINT_GAS_LIMIT ${this.maxMintGasLimit}. Capping to ${this.maxMintGasLimit}.`);
+                console.warn(`
+            Estimated gas ${estimGas} exceeds MAX_MINT_GAS_LIMIT ${this.maxMintGasLimit}. Capping to ${this.maxMintGasLimit}.`);
+                console.warn(``);
                 return BigInt(Math.floor(this.maxMintGasLimit));
             }
             if (this.mintGas != estimGas) {
-                console.log(`Estimated gas ${estimGas} different from previous gas ${this.mintGas}. New gas returned : ` + estimGas);
+                console.log(`
+            Estimated gas ${estimGas} different from previous gas ${this.mintGas}. New gas returned : ` + estimGas);
+                console.warn(``);
             }
 
             return estimGas;
@@ -955,7 +969,9 @@ export class NMintFast {
             console.warn('❌ No active Flashbots RPCs available.');
             return;
         }
-
+        //await Promise.allSettled(relays.map(async (relay) => {
+        //    const rpcUrl = relay.url;
+        //    const method = relay.method;
         await Promise.allSettled(activeFlashbotsRpcs.map(async (rpcUrl) => {
             try {
                 const bundledTxs = rpcUrl.includes('rpc.mevblocker.io') || rpcUrl.includes('rpc.beaverbuild.org')
@@ -974,9 +990,9 @@ export class NMintFast {
                 const body = {
                     jsonrpc: "2.0",
                     id: 1,
-                    method: (rpcUrl.includes('rpc.flashbots.net') ? "eth_sendRawTransaction" : "eth_sendBundle"),
+                    method: "eth_sendBundle",
                     params: [
-                        (rpcUrl.includes('rpc.flashbots.net') ? signedTx : {
+                        {
                             txs: bundledTxs,
                             blockNumber: `0x${(blockNumber).toString(16)}`,
                             minTimestamp: 0,
@@ -985,7 +1001,7 @@ export class NMintFast {
                             droppingTxHashes: [],
                             uuid: randomUUID(),
                             refundPercent: 0
-                        })
+                        }
                         ,
                     ],
                 };
@@ -993,34 +1009,49 @@ export class NMintFast {
                 const message = JSON.stringify(body);
                 const signature = await this.authSigner.signMessage(message);
                 const signerAddress = await this.authSigner.getAddress();
-                const recoveredAddress = ethers.verifyMessage(message, signature);
 
                 const header = {
                     'Content-Type': 'application/json',
                     'X-Flashbots-Signature': `${signerAddress}:${signature}`,
+                };
+
+                let recovered = ethers.verifyMessage(message, signature);
+
+                if (recovered.toLowerCase() !== signerAddress.toLowerCase()) {
+                    throw new Error(`Recovered ${recovered} != auth signer ${signerAddress}`);
                 }
 
-                if (rpcUrl.includes('rpc.flashbots.net')) {
+
+
+
+                if (1 == 2 && (rpcUrl.includes('rpc.flashbots.net') || rpcUrl.includes('relay.flashbots.net'))) {
+                    console.log(`
+            📦 1 Bundle submitted to ${rpcUrl}: 
+                    `);
+                    
+                    
                     if (this.justMintedBySomeoneElse) {
                         console.warn(`
             ❌ JUST MINTED BY SOMEONE ELSE - MINT BLOCKED
                         `);
                         return;
                     }
+
                     const res = await fetch(rpcUrl, {
                         method: "POST",
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
+                        headers: header,
                         body: JSON.stringify(body)
                     });
 
                     const result = await res.json();
+
+
+
                     if (result.result) {
                         //console.log(`📦 Bundle submitted to ${rpcUrl}: `);
                     } else if (result.error) {
                         console.warn(`
-            ❌ Flashbots submission failed: ${result.error.message}
+            ❌ Flashbots submission failed ${rpcUrl}: ${JSON.stringify(result.error.message)}
                         `);
                         if (result.error.code === 429) { // Too Many Requests
                             this.disabledRpcs.set(rpcUrl, Date.now() + 3600000); // Disable for 1 hour
@@ -1032,7 +1063,17 @@ export class NMintFast {
                         console.warn(`
             ⚠️ Unknown response from Flashbots`, result);
                     }
+
+
+
                 } else {
+
+
+
+                    console.log(`
+            📦 2 Bundle submitted to ${rpcUrl}: 
+            `);
+
                     if (this.justMintedBySomeoneElse) {
                         console.warn(`
             ❌ JUST MINTED BY SOMEONE ELSE - MINT BLOCKED
@@ -1373,7 +1414,7 @@ export class NMintFast {
             this.raceModeCounter = 3; // Race for the next 3 blocks
             this.raceModeTriggered = false;
             console.log(`
-                🏎️ Race mode enabled!
+            🏎️ Race mode enabled!
             `);
         }
 
